@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="SistemaVotoAPI/SistemaVotoAPI.csproj" Id="271301e2-7a9e-413b-85d0-d3905ea49c70" />
+  <Project Path="SistemaVotoModelos/SistemaVotoModelos.csproj" />
+  <Project Path="SistemaVotoMVC/SistemaVotoMVC.csproj" Id="cef7ee30-684d-4918-bdfc-531d637d5bfb" />
+</Solution>

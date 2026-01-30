@@ -1,0 +1,181 @@
+﻿@model IEnumerable<SistemaVotoModelos.Votante>
+@{
+    ViewData["Title"] = "Gestión de Votantes";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h3 class="fw-bold mb-0">👥 Gestión de Votantes</h3>
+        <small class="text-muted">Administra el padrón electoral.</small>
+    </div>
+
+    <div class="d-flex gap-2">
+        <a asp-action="Main" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Volver
+        </a>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalNuevo">
+            <i class="bi bi-person-plus-fill"></i> Nuevo Votante
+        </button>
+    </div>
+</div>
+
+@if (TempData["Mensaje"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show">@TempData["Mensaje"]<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show">@TempData["Error"]<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+}
+
+<div class="card shadow-sm border-0">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Foto</th>
+                        <th>Cédula</th>
+                        <th>Nombre</th>
+                        <th>Email</th>
+                        <th>Rol</th>
+                        <th>Junta</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var v in Model)
+                    {
+                        <tr>
+                            <td>
+                                @if (!string.IsNullOrEmpty(v.FotoUrl))
+                                {
+                                    <img src="@v.FotoUrl" class="rounded-circle" style="width: 40px; height: 40px; object-fit: cover;" />
+                                }
+                                else
+                                {
+                                    <div class="bg-secondary rounded-circle d-flex align-items-center justify-content-center text-white" style="width: 40px; height: 40px;">
+                                        @(v.NombreCompleto?.Substring(0, 1) ?? "?")
+                                    </div>
+                                }
+                            </td>
+                            <td>@v.Cedula</td>
+                            <td>@v.NombreCompleto</td>
+                            <td>@v.Email</td>
+                            <td>@(v.RolId == 1 ? "Admin" : "Votante")</td>
+                            <td>@(v.JuntaId?.ToString() ?? "N/A")</td>
+                            <td>
+                                <div class="btn-group">
+                                    <button class="btn btn-outline-primary btn-sm"
+                                            onclick="abrirEditar('@v.Cedula', '@v.NombreCompleto', '@v.Email', @v.RolId, '@(v.JuntaId?.ToString() ?? "")', '@v.FotoUrl')">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <form asp-action="EliminarVotante" method="post" onsubmit="return confirm('¿Borrar a @v.NombreCompleto?');">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="cedula" value="@v.Cedula" />
+                                        <button class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalNuevo" tabindex="-1">
+    <div class="modal-dialog">
+        <form asp-action="CrearVotante" method="post" class="modal-content">
+            @Html.AntiForgeryToken()
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">Nuevo Usuario</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <label class="fw-bold">Cédula</label>
+                <input name="Cedula" class="form-control mb-2" required maxlength="10" />
+
+                <label class="fw-bold">Nombre Completo</label>
+                <input name="NombreCompleto" class="form-control mb-2" required />
+
+                <label class="fw-bold">Email</label>
+                <input name="Email" type="email" class="form-control mb-2" required />
+
+                <label class="fw-bold">URL de la Foto (Opcional)</label>
+                <input name="FotoUrl" class="form-control mb-2" placeholder="https://ejemplo.com/foto.jpg" />
+
+                <label class="fw-bold">Rol</label>
+                <select name="RolId" class="form-select mb-2">
+                    <option value="2">Votante</option>
+                    <option value="1">Administrador</option>
+                </select>
+
+                <label class="fw-bold">Junta ID</label>
+                <input name="JuntaId" type="number" class="form-control mb-2" placeholder="Ej: 1001" />
+
+                <label class="fw-bold">Contraseña</label>
+                <input name="Password" type="password" class="form-control mb-2" />
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary w-100">Guardar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal fade" id="modalEditar" tabindex="-1">
+    <div class="modal-dialog">
+        <form asp-action="EditarVotante" method="post" class="modal-content">
+            @Html.AntiForgeryToken()
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title">Editar Usuario</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" name="Cedula" id="editCedulaHidden" />
+
+                <label class="fw-bold">Cédula</label>
+                <input id="editCedulaDisplay" class="form-control mb-2" disabled />
+
+                <label class="fw-bold">Nombre</label>
+                <input name="NombreCompleto" id="editNombre" class="form-control mb-2" required />
+
+                <label class="fw-bold">Email</label>
+                <input name="Email" id="editEmail" class="form-control mb-2" required />
+
+                <label class="fw-bold">URL de la Foto</label>
+                <input name="FotoUrl" id="editFoto" class="form-control mb-2" placeholder="https://..." />
+
+                <label class="fw-bold">Rol</label>
+                <select name="RolId" id="editRol" class="form-select mb-2">
+                    <option value="2">Votante</option>
+                    <option value="1">Administrador</option>
+                </select>
+
+                <label class="fw-bold">Junta ID</label>
+                <input name="JuntaId" id="editJunta" type="number" class="form-control mb-2" />
+
+                <label class="fw-bold">Nueva Contraseña (Dejar vacío para no cambiar)</label>
+                <input name="Password" type="password" class="form-control mb-2" />
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-info text-white w-100">Actualizar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    function abrirEditar(cedula, nombre, email, rol, junta, foto) {
+        document.getElementById('editCedulaHidden').value = cedula;
+        document.getElementById('editCedulaDisplay').value = cedula;
+        document.getElementById('editNombre').value = nombre;
+        document.getElementById('editEmail').value = email;
+        document.getElementById('editRol').value = rol;
+        document.getElementById('editJunta').value = junta;
+        document.getElementById('editFoto').value = foto;
+        new bootstrap.Modal(document.getElementById('modalEditar')).show();
+    }
+</script>

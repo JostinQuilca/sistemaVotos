@@ -1,0 +1,41 @@
+﻿@model SistemaVotoMVC.Models.LoginViewModel
+@{
+    Layout = null;
+}
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <title>Acceder</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+</head>
+
+<body class="bg-light">
+    <div class="container min-vh-100 d-flex align-items-center justify-content-center">
+        <div class="card shadow p-4" style="max-width: 400px; width:100%">
+            <h4 class="text-center mb-4">🔐 Acceso al Sistema</h4>
+
+            <form asp-action="Login" method="post">
+                <div class="mb-3">
+                    <label>Cédula</label>
+                    <input asp-for="Cedula" class="form-control" />
+                </div>
+
+                <div class="mb-3">
+                    <label>Contraseña</label>
+                    <input asp-for="Password" type="password" class="form-control" />
+                </div>
+
+                <button type="submit" class="btn btn-primary w-100">
+                    Ingresar
+                </button>
+
+                <div class="text-danger mt-3">
+                    @Html.ValidationSummary()
+                </div>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

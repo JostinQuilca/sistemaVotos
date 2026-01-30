@@ -1,0 +1,25 @@
+﻿@{
+    ViewData["Title"] = "Certificado de Votación";
+}
+
+<div class="container d-flex justify-content-center align-items-center" style="min-height: 60vh;">
+    <div class="card shadow-lg border-0 text-center p-5" style="max-width: 500px;">
+        <div class="mb-4">
+            <div class="rounded-circle bg-success d-inline-flex align-items-center justify-content-center" style="width: 100px; height: 100px;">
+                <i class="bi bi-check-lg text-white" style="font-size: 4rem;"></i>
+            </div>
+        </div>
+
+        <h2 class="fw-bold text-success mb-3">¡Voto Registrado!</h2>
+        <p class="text-muted fs-5 mb-4">
+            Su participación ha sido registrada correctamente en el sistema electoral. Gracias por ejercer su derecho al voto.
+        </p>
+
+        <div class="d-grid gap-2">
+           
+            <a asp-controller="Aut" asp-action="Logout" class="btn btn-link text-muted">
+                Cerrar Sesión
+            </a>
+        </div>
+    </div>
+</div>

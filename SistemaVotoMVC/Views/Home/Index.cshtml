@@ -1,0 +1,21 @@
+﻿@{
+    ViewData["Title"] = "Inicio";
+}
+
+<div class="container vh-100 d-flex justify-content-center align-items-center">
+    <div class="text-center">
+        <h1 class="mb-4">Sistema de Voto Electrónico</h1>
+
+        <div class="d-grid gap-3 col-6 mx-auto">
+            <!-- Botón Acceder -->
+            <a asp-controller="Aut" asp-action="Login" class="btn btn-primary btn-lg">
+                Acceder
+            </a>
+
+            <!-- Botón Resultados -->
+            <a asp-controller="Resultados" asp-action="Index" class="btn btn-secondary btn-lg">
+                Revisar resultados de elecciones
+            </a>
+        </div>
+    </div>
+</div>

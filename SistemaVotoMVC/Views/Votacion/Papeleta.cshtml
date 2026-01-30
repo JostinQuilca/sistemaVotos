@@ -1,0 +1,110 @@
+﻿@model IEnumerable<SistemaVotoModelos.Candidato>
+@{
+    ViewData["Title"] = "Papeleta de Votación";
+    var eleccion = ViewBag.Eleccion as SistemaVotoModelos.Eleccion;
+}
+
+<div class="container mt-5 mb-5">
+    <div class="text-center mb-5">
+        <h1 class="display-5 fw-bold text-primary">@eleccion?.Titulo</h1>
+        <p class="lead text-muted">Por favor, seleccione su candidato de preferencia.</p>
+
+        @if (TempData["Error"] != null)
+        {
+            <div class="alert alert-danger d-inline-block px-4 shadow-sm">
+                <i class="bi bi-exclamation-triangle-fill me-2"></i> @TempData["Error"]
+            </div>
+        }
+    </div>
+
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4 justify-content-center">
+        @if (!Model.Any())
+        {
+            <div class="col-12 text-center text-muted py-5">
+                <i class="bi bi-inbox fs-1"></i>
+                <p class="mt-2">No hay candidatos registrados para esta elección.</p>
+            </div>
+        }
+        else
+        {
+            @foreach (var c in Model)
+            {
+                <div class="col">
+                    <div class="card h-100 shadow border-0 hover-effect">
+
+                        <div class="card-header bg-white border-bottom-0 text-center pt-4 pb-0">
+                            @if (!string.IsNullOrEmpty(c.Lista?.LogoUrl))
+                            {
+                                <img src="@c.Lista.LogoUrl" style="height: 70px; object-fit: contain;" alt="Logo Lista" class="img-fluid">
+                            }
+                            else
+                            {
+                                <span class="badge bg-dark fs-6">LISTA @c.ListaId</span>
+                            }
+                            <h4 class="mt-2 fw-bold text-dark">@c.Lista?.NombreLista</h4>
+                        </div>
+
+                        <div class="card-body text-center">
+                            <div class="mb-3 position-relative d-inline-block">
+                                @if (!string.IsNullOrEmpty(c.Votante?.FotoUrl))
+                                {
+                                    <img src="@c.Votante.FotoUrl" class="rounded-circle border border-3 border-light shadow-sm"
+                                         style="width: 140px; height: 140px; object-fit: cover;" alt="Foto Candidato">
+                                }
+                                else
+                                {
+                                    <div class="rounded-circle bg-secondary text-white d-flex align-items-center justify-content-center border border-3 border-light shadow-sm"
+                                         style="width: 140px; height: 140px; font-size: 3rem;">
+                                        <i class="bi bi-person"></i>
+                                    </div>
+                                }
+                            </div>
+
+                            <h5 class="card-title fw-bold text-primary mb-1">@c.Votante?.NombreCompleto</h5>
+                            <span class="badge bg-light text-dark border">@c.RolPostulante</span>
+                        </div>
+
+                        <div class="card-footer bg-white border-0 pb-4 px-4 pt-0">
+                            <hr class="mb-4 opacity-25">
+
+                            <form asp-action="EmitirVoto" method="post">
+                                <input type="hidden" name="eleccionId" value="@c.EleccionId" />
+                                <input type="hidden" name="listaId" value="@c.ListaId" />
+
+                                <input type="hidden" name="cedulaCandidato" value="@c.Cedula" />
+                                <input type="hidden" name="rolPostulante" value="@c.RolPostulante" />
+
+                                <button type="submit" class="btn btn-primary btn-lg w-100 rounded-pill fw-bold shadow-sm transition-btn"
+                                        onclick="return confirm('¿Confirma su voto por @c.Votante?.NombreCompleto de la lista @c.Lista?.NombreLista?')">
+                                    <i class="bi bi-check-circle-fill me-2"></i> VOTAR
+                                </button>
+                            </form>
+                        </div>
+
+                    </div>
+                </div>
+            }
+        }
+    </div>
+</div>
+
+<style>
+    /* Efecto suave al pasar el mouse por la tarjeta */
+    .hover-effect {
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+        .hover-effect:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 1rem 3rem rgba(0,0,0,.175) !important;
+        }
+
+    /* Efecto en el botón */
+    .transition-btn {
+        transition: background-color 0.2s, transform 0.1s;
+    }
+
+        .transition-btn:active {
+            transform: scale(0.98);
+        }
+</style>

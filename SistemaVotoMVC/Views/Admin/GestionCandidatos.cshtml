@@ -1,0 +1,195 @@
+﻿@model IEnumerable<SistemaVotoModelos.Candidato>
+@{
+    ViewData["Title"] = "Gestión de Candidatos";
+    var eleccion = ViewBag.Eleccion as SistemaVotoModelos.Eleccion;
+    var listas = ViewBag.Listas as List<SistemaVotoModelos.Lista>;
+    var votantes = ViewBag.TodosLosVotantes as List<SistemaVotoModelos.Votante>;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h3 class="mb-0">🎖️ Gestión de Candidatos</h3>
+        <p class="text-muted small">Elección: <strong>@(eleccion?.Titulo ?? "Desconocida")</strong></p>
+    </div>
+    <div class="d-flex gap-2">
+        <a asp-action="GestionElecciones" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Volver
+        </a>
+        <button class="btn btn-dark" data-bs-toggle="modal" data-bs-target="#modalNuevo">
+            <i class="bi bi-plus-circle"></i> Nuevo Candidato
+        </button>
+    </div>
+</div>
+
+@if (TempData["Mensaje"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show">@TempData["Mensaje"]<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show">@TempData["Error"]<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+}
+
+<div class="card shadow-sm border-0">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Foto</th>
+                        <th>Cédula</th>
+                        <th>Nombre</th>
+                        <th>Lista</th>
+                        <th>Rol Postulante</th>
+                        <th class="text-end">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in Model)
+                    {
+                        <tr>
+                            <td>
+                                @if (!string.IsNullOrEmpty(item.Votante?.FotoUrl))
+                                {
+                                    <img src="@item.Votante.FotoUrl" class="rounded-circle" style="width: 40px; height: 40px; object-fit: cover;">
+                                }
+                                else
+                                {
+                                    <div class="bg-secondary rounded-circle text-white d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                                        <i class="bi bi-person"></i>
+                                    </div>
+                                }
+                            </td>
+                            <td>@item.Cedula</td>
+                            <td>@item.Votante?.NombreCompleto</td>
+                            <td>
+                                @if (item.Lista != null)
+                                {
+                                    <span class="badge bg-info text-dark">@item.Lista.NombreLista</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary">Independiente</span>
+                                }
+                            </td>
+                            <td class="fw-bold">@item.RolPostulante</td>
+                            <td class="text-end">
+                                <button class="btn btn-outline-primary btn-sm"
+                                        onclick="abrirEditar(@item.Id, @item.ListaId, '@item.RolPostulante', @item.EleccionId, '@item.Cedula')">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+
+                                <form asp-action="EliminarCandidato" method="post" class="d-inline" onsubmit="return confirm('¿Eliminar este candidato?');">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="id" value="@item.Id" />
+                                    <input type="hidden" name="eleccionId" value="@item.EleccionId" />
+                                    <button class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i></button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalNuevo" tabindex="-1">
+    <div class="modal-dialog">
+        <form asp-action="CrearCandidato" method="post" class="modal-content">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="EleccionId" value="@eleccion?.Id" />
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title">Nuevo Candidato</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <label class="form-label">Candidato (Buscar por Cédula/Nombre)</label>
+                <select name="Cedula" class="form-select mb-3" required>
+                    <option value="">-- Seleccione una persona --</option>
+                    @if (votantes != null)
+                    {
+                        foreach (var v in votantes)
+                        {
+                            <option value="@v.Cedula">@v.Cedula - @v.NombreCompleto</option>
+                        }
+                    }
+                </select>
+
+                <label class="form-label">Pertenece a la Lista</label>
+                <select name="ListaId" class="form-select mb-3" required>
+                    @if (listas != null)
+                    {
+                        foreach (var l in listas)
+                        {
+                            <option value="@l.Id">@l.NombreLista</option>
+                        }
+                    }
+                </select>
+
+                <label class="form-label">Cargo al que postula</label>
+                <input name="RolPostulante" class="form-control" placeholder="Ej: Presidente, Alcalde..." required />
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-dark w-100">Registrar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal fade" id="modalEditar" tabindex="-1">
+    <div class="modal-dialog">
+        <form asp-action="EditarCandidato" method="post" class="modal-content">
+            @Html.AntiForgeryToken()
+
+            <input type="hidden" name="Id" id="editId" />
+            <input type="hidden" name="EleccionId" id="editEleccionId" />
+
+            <input type="hidden" name="Cedula" id="editCedula" />
+
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">Editar Candidatura</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <label class="form-label fw-bold">Cambiar Lista</label>
+                <select name="ListaId" id="editListaId" class="form-select mb-3" required>
+                    @if (listas != null)
+                    {
+                        foreach (var l in listas)
+                        {
+                            <option value="@l.Id">@l.NombreLista</option>
+                        }
+                    }
+                </select>
+
+                <label class="form-label fw-bold">Cargo</label>
+                <input name="RolPostulante" id="editRol" class="form-control" required />
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary w-100">Guardar Cambios</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    function abrirEditar(id, listaId, rol, eleccionId, cedula) {
+        // 1. Asignamos los valores ocultos
+        document.getElementById('editId').value = id;
+        document.getElementById('editEleccionId').value = eleccionId;
+
+        // 2. CORRECCIÓN: Asignamos la Cédula
+        document.getElementById('editCedula').value = cedula;
+
+        // 3. Valores visibles
+        document.getElementById('editRol').value = rol;
+
+        // 4. Seleccionamos la lista correcta
+        var selectLista = document.getElementById('editListaId');
+        selectLista.value = listaId;
+
+        // 5. Mostrar modal
+        new bootstrap.Modal(document.getElementById('modalEditar')).show();
+    }
+</script>

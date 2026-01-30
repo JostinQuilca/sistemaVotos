@@ -1,0 +1,58 @@
+﻿@model IEnumerable<SistemaVotoModelos.Eleccion>
+@{
+    ViewData["Title"] = "Zona de Votación";
+}
+
+<div class="container py-5">
+    <div class="text-center mb-5">
+        <h1 class="fw-bold display-5">👋 ¡Bienvenido, @User.Identity?.Name!</h1>
+        <p class="text-muted fs-5">Aquí encontrarás las elecciones habilitadas para ti.</p>
+    </div>
+
+    @if (!Model.Any())
+    {
+        <div class="alert alert-warning text-center shadow-sm p-5">
+            <i class="bi bi-calendar-x fs-1 d-block mb-3 text-warning"></i>
+            <h3 class="fw-bold">No hay elecciones activas</h3>
+            <p>En este momento no hay procesos electorales abiertos. Por favor intente más tarde.</p>
+        </div>
+    }
+    else
+    {
+        <div class="row justify-content-center">
+            @foreach (var item in Model)
+            {
+                <div class="col-md-6 col-lg-4 mb-4">
+                    <div class="card h-100 shadow border-0 hover-effect">
+                        <div class="card-header bg-primary text-white text-center py-3">
+                            <h5 class="card-title mb-0 fw-bold">@item.Titulo</h5>
+                        </div>
+                        <div class="card-body text-center py-4">
+                            <span class="badge bg-success mb-3 px-3 py-2">HABILITADA</span>
+                            <p class="text-muted small">
+                                Cierre: @item.FechaFin.ToString("dd MMMM, HH:mm")
+                            </p>
+                            <hr />
+                            <p class="card-text">
+                                Ejerza su derecho al voto de manera rápida y segura.
+                            </p>
+                        </div>
+                        <div class="card-footer bg-white border-0 pb-4 px-4">
+                            <a asp-action="Papeleta" asp-route-eleccionId="@item.Id" class="btn btn-outline-primary w-100 fw-bold btn-lg">
+                                <i class="bi bi-hand-index-thumb"></i> IR A VOTAR
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<style>
+    .hover-effect:hover {
+        transform: translateY(-5px);
+        transition: transform 0.3s ease;
+        box-shadow: 0 1rem 3rem rgba(0,0,0,.175) !important;
+    }
+</style>

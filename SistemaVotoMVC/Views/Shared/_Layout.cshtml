@@ -1,0 +1,56 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <title>@ViewData["Title"] - Sistema de Votaciones</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Bootstrap de prueba visto en clase -->
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" />
+</head>
+
+<body class="bg-light">
+
+    <!-- HEADER -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm">
+        <div class="container-fluid">
+            <span class="navbar-brand fw-bold">
+                🗳️ Sistema de Votaciones Electrónico
+            </span>
+
+            @if (User.Identity != null && User.Identity.IsAuthenticated)
+            {
+                <div class="text-white">
+                    <span class="me-3">
+                        <i class="bi bi-person-circle"></i>
+                        @User.Identity.Name
+                    </span>
+                    <a asp-controller="Aut" asp-action="Logout" class="btn btn-sm btn-outline-light">
+                        Salir
+                    </a>
+                </div>
+            }
+        </div>
+    </nav>
+
+    <!-- CONTENIDO -->
+    <main class="container py-4">
+        @RenderBody()
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="text-center text-muted py-3 border-top">
+        <small>
+            © @DateTime.Now.Year - Sistema de Votaciones | Universidad Técnica
+        </small>
+    </footer>
+
+    <!-- JS -->
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Sección opcional para scripts por vista -->
+    @RenderSection("Scripts", required: false)
+
+</body>
+</html>

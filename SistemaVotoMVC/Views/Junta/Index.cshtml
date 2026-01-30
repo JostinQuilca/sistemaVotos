@@ -1,0 +1,109 @@
+﻿@{
+    Layout = null;
+}
+@* Proyecto: SistemaVotoMVC *@
+@* Archivo: Views/Junta/Index.cshtml *@
+
+@model IEnumerable<dynamic>
+
+<div class="container mt-4">
+    @* --- SECCIÓN: ENCABEZADO CON DATOS DE LA MESA --- *@
+    <div class="card border-primary mb-4">
+        <div class="card-header bg-primary text-white">
+            <h4 class="mb-0">Panel de Gestión - @User.Identity.Name</h4>
+        </div>
+        <div class="card-body">
+            @if (ViewBag.DatosJunta != null)
+            {
+                <div class="row">
+                    <div class="col-md-4"><strong>Junta ID:</strong> @ViewBag.DatosJunta.id</div>
+                    <div class="col-md-4"><strong>Mesa N°:</strong> @ViewBag.DatosJunta.numeroMesa</div>
+                    <div class="col-md-4"><strong>Ubicación ID:</strong> @ViewBag.DatosJunta.direccionId</div>
+                </div>
+            }
+        </div>
+    </div>
+
+    @* --- SECCIÓN: BUSCADOR POR CÉDULA --- *@
+    <div class="row mb-3">
+        <div class="col-md-5">
+            <div class="input-group">
+                <span class="input-group-text bg-light">🔍</span>
+                <input type="text" id="filtroCedula" class="form-control"
+                       placeholder="Escriba la cédula para buscar..." onkeyup="ejecutarFiltro()">
+            </div>
+        </div>
+    </div>
+
+    @* --- SECCIÓN: TABLA DE VOTANTES --- *@
+    <div class="table-responsive">
+        <table class="table table-striped table-hover" id="tablaPrincipal">
+            <thead class="table-dark">
+                <tr>
+                    <th>Cédula</th>
+                    <th>Nombre del Votante</th>
+                    <th>Estado de Voto</th>
+                    <th>Acción</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var v in Model)
+                {
+                    <tr class="fila-votante">
+                        <td class="col-cedula">@v.cedula</td>
+                        <td>@v.nombreCompleto</td>
+                        <td>
+                            @if (v.haVotado)
+                            {
+                                <span class="badge bg-danger">VOTO REALIZADO</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-success">PENDIENTE</span>
+                            }
+                        </td>
+                        <td>
+                            @if (!v.haVotado)
+                            {
+                                @* Botón para disparar la generación del token *@
+                                <button class="btn btn-outline-primary btn-sm"
+                                        onclick="abrirModalToken('@v.cedula')">
+                                    Habilitar Voto
+                                </button>
+                            }
+                            else
+                            {
+                                <button class="btn btn-secondary btn-sm" disabled>Cerrado</button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@* --- SECCIÓN: LÓGICA DE INTERFAZ (JAVASCRIPT) --- *@
+<script>
+    // Función para filtrar la tabla en tiempo real
+    function ejecutarFiltro() {
+        let textoBusqueda = document.getElementById("filtroCedula").value;
+        let filas = document.getElementsByClassName("fila-votante");
+
+        for (let i = 0; i < filas.length; i++) {
+            let cedula = filas[i].getElementsByClassName("col-cedula")[0].innerText;
+
+            // Si la cédula contiene el texto buscado, se muestra, si no, se oculta
+            if (cedula.includes(textoBusqueda)) {
+                filas[i].style.display = "";
+            } else {
+                filas[i].style.display = "none";
+            }
+        }
+    }
+
+    // Función temporal para el botón (la programaremos después)
+    function abrirModalToken(cedula) {
+        alert("Generando acceso para: " + cedula);
+    }
+</script>

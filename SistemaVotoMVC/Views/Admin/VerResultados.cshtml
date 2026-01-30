@@ -1,0 +1,116 @@
+﻿@{
+    ViewData["Title"] = "Resultados Electorales";
+    var eleccion = ViewBag.Eleccion as SistemaVotoModelos.Eleccion;
+    var candidatos = ViewBag.Candidatos as List<SistemaVotoModelos.Candidato>;
+
+    // Recuperamos los datos reales que nos envió el Controller
+    // Si es null (porque no hay votos), usamos 0
+    var totalVotos = (int)(ViewBag.TotalVotos ?? 0);
+    var conteo = ViewBag.ConteoVotos as Dictionary<string, int>;
+}
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold mb-0">📊 Resultados: @(eleccion?.Titulo ?? "Cargando...")</h2>
+            <div class="mt-2">
+                <span class="badge @(eleccion?.Estado == "ACTIVA" ? "bg-success" : eleccion?.Estado == "CONFIGURACION" ? "bg-warning text-dark" : "bg-secondary")">
+                    Estado: @(eleccion?.Estado ?? "DESCONOCIDO")
+                </span>
+                <span class="badge bg-light text-dark border ms-2">
+                    Total Votos: <strong>@totalVotos</strong>
+                </span>
+            </div>
+        </div>
+        <a asp-action="GestionElecciones" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Volver
+        </a>
+    </div>
+
+    @if (eleccion != null && eleccion.Estado == "CONFIGURACION")
+    {
+        <div class="card shadow border-warning mb-3">
+            <div class="card-body text-center py-5">
+                <i class="bi bi-exclamation-triangle text-warning" style="font-size: 4rem;"></i>
+                <h3 class="fw-bold mt-3">Elección en Configuración</h3>
+                <p class="text-muted fs-5">
+                    El sistema de conteo iniciará cuando cambies el estado a <span class="badge bg-success">ACTIVA</span>.
+                </p>
+            </div>
+        </div>
+    }
+    else
+    {
+        @if (candidatos == null || !candidatos.Any())
+        {
+            <div class="alert alert-info">No hay candidatos registrados.</div>
+        }
+        else
+        {
+            <div class="row">
+                @foreach (var c in candidatos)
+                {
+                    // --- LÓGICA REAL ---
+                    // Buscamos cuántos votos tiene este candidato en el diccionario
+                    int votosReales = 0;
+                    if (conteo != null && conteo.ContainsKey(c.Cedula))
+                    {
+                        votosReales = conteo[c.Cedula];
+                    }
+
+                    // Calculamos porcentaje REAL (evitando división por cero)
+                    double porcentaje = totalVotos > 0 ? (double)votosReales / totalVotos * 100 : 0;
+                    // -------------------
+
+                    <div class="col-md-6 mb-4">
+                        <div class="card shadow-sm border-0 h-100">
+                            <div class="card-body">
+                                <div class="d-flex align-items-center mb-3">
+                                    <div class="me-3">
+                                        @if (!string.IsNullOrEmpty(c.Votante?.FotoUrl))
+                                        {
+                                            <img src="@c.Votante.FotoUrl" class="rounded-circle border"
+                                                 style="width: 60px; height: 60px; object-fit: cover;">
+                                        }
+                                        else
+                                        {
+                                            <div class="bg-secondary rounded-circle text-white d-flex align-items-center justify-content-center"
+                                                 style="width:60px; height:60px;">
+                                                <i class="bi bi-person fs-3"></i>
+                                            </div>
+                                        }
+                                    </div>
+
+                                    <div class="flex-grow-1">
+                                        <h5 class="fw-bold mb-0">@c.Votante?.NombreCompleto</h5>
+                                        <div class="badge bg-primary mb-1">@c.RolPostulante</div>
+                                        <div class="small text-muted">
+                                            Lista: <strong>@(c.Lista?.NombreLista ?? "Independiente")</strong>
+                                        </div>
+                                    </div>
+
+                                    @if (!string.IsNullOrEmpty(c.Lista?.LogoUrl))
+                                    {
+                                        <img src="@c.Lista.LogoUrl" style="height: 40px; max-width: 60px; object-fit:contain;">
+                                    }
+                                </div>
+
+                                <hr class="my-2">
+
+                                <div class="d-flex justify-content-between align-items-end mb-1">
+                                    <h3 class="fw-bold mb-0">@votosReales</h3>
+                                    <span class="fs-5 fw-bold text-success">@porcentaje.ToString("0.0")%</span>
+                                </div>
+
+                                <div class="progress" style="height: 10px;">
+                                    <div class="progress-bar bg-success" role="progressbar"
+                                         style="width: @porcentaje.ToString("0")%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    }
+</div>

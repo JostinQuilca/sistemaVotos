@@ -1,0 +1,90 @@
+﻿@{
+    ViewData["Title"] = "Panel de Administración";
+}
+
+<div class="container mt-5">
+
+    <!-- Encabezado -->
+    <div class="row mb-4">
+        <div class="col text-center">
+            <h2 class="fw-bold">🛡️ Panel de Administración</h2>
+            <p class="text-muted">
+                Bienvenido, <strong>@ViewBag.NombreAdmin</strong>
+            </p>
+        </div>
+    </div>
+
+    <!-- Tarjetas -->
+    <div class="row g-4 justify-content-center">
+
+        <!-- Votantes -->
+        <div class="col-md-4">
+            <div class="card shadow-lg border-0 h-100 text-center">
+                <div class="card-body py-4">
+                    <div class="mb-3">
+                        <i class="bi bi-people-fill fs-1 text-primary"></i>
+                    </div>
+                    <h5 class="fw-bold">Gestión de Votantes</h5>
+                    <p class="text-muted small">
+                        Registro, edición y control de ciudadanos del sistema.
+                    </p>
+                    <a asp-controller="Admin"
+                       asp-action="GestionVotantes"
+                       class="btn btn-primary w-100">
+                        Administrar Usuarios
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Elecciones -->
+        <div class="col-md-4">
+            <div class="card shadow-lg border-0 h-100 text-center">
+                <div class="card-body py-4">
+                    <div class="mb-3">
+                        <i class="bi bi-check2-square fs-1 text-success"></i>
+                    </div>
+                    <h5 class="fw-bold">Gestión de Elecciones</h5>
+                    <p class="text-muted small">
+                        Crear procesos electorales y controlar su estado.
+                    </p>
+                    <a asp-controller="Admin"
+                       asp-action="GestionElecciones"
+                       class="btn btn-success w-100">
+                        Gestionar Elecciones
+                    </a>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- Juntas -->
+        <div class="col-md-4">
+            <div class="card shadow-lg border-0 h-100 text-center">
+                <div class="card-body py-4">
+                    <div class="mb-3">
+                        <i class="bi bi-diagram-3-fill fs-1 text-warning"></i>
+                    </div>
+                    <h5 class="fw-bold">Gestión de Juntas</h5>
+                    <p class="text-muted small">
+                        Asignación de jefes de junta y control de mesas.
+                    </p>
+                    <a asp-controller="Juntas"
+                       asp-action="Index"
+                       class="btn btn-warning w-100 text-dark">
+                        Administrar Juntas
+                    </a>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Footer -->
+    <div class="row mt-5">
+        <div class="col text-center text-muted small">
+            Sistema de Votación Electrónica • Panel Administrativo
+        </div>
+    </div>
+
+</div>
