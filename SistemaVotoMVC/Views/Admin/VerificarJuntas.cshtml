@@ -1,0 +1,46 @@
+﻿@using SistemaVotoModelos.DTOs
+@model IEnumerable<JuntaDetalleDto>
+@{
+    ViewData["Title"] = "Verificación";
+}
+
+<tbody>
+    @foreach (var j in Model)
+    {
+        <tr>
+            <td>@j.Id</td>
+            <td>@j.Ubicacion - Mesa @j.NumeroMesa</td>
+            <td>
+                @if (j.EstadoJunta == 2)
+                {
+                    <span class="badge bg-success">ABIERTA</span>
+                }
+                else if (j.EstadoJunta == 3)
+                {
+
+                    <span class="badge bg-warning text-dark">PENDIENTE</span>
+                }
+                else if (j.EstadoJunta == 4)
+                {
+
+                    <span class="badge bg-primary">APROBADA</span>
+                }
+                else
+                {
+
+                    <span class="badge bg-secondary">CERRADA (@j.EstadoJunta)</span>
+                }
+            </td>
+            <td>
+                @if (j.EstadoJunta == 3)
+                {
+                    <form asp-action="AprobarJuntaVerificada" method="post">
+                        <input type="hidden" name="id" value="@j.Id" />
+                        <input type="hidden" name="eleccionId" value="@ViewBag.EleccionId" />
+                        <button class="btn btn-primary btn-sm">APROBAR</button>
+                    </form>
+                }
+            </td>
+        </tr>
+    }
+</tbody>

@@ -21,10 +21,13 @@ namespace SistemaVotoAPI.Controllers
         }
 
         // GET: api/Votantes
+        // IMPORTANTE: Devuelve TODOS los usuarios para que el Admin los gestione.
         [HttpGet]
         public async Task<ActionResult<IEnumerable<Votante>>> GetVotantes()
         {
-            return await _context.Votantes.ToListAsync();
+            return await _context.Votantes
+                .OrderBy(v => v.RolId) // Ordena: 1=Admin, 2=Votante, 3=Jefe
+                .ToListAsync();
         }
 
         // GET: api/Votantes/0102030405
@@ -55,17 +58,11 @@ namespace SistemaVotoAPI.Controllers
             if (await _context.Votantes.AnyAsync(v => v.Cedula == votante.Cedula))
                 return Conflict("Ya existe un votante con esa cédula.");
 
-            /*
-             Lógica de negocio:
-             Validación de roles permitidos en el sistema
-            */
+            // Validación de roles permitidos (1=Admin, 2=Votante, 3=Jefe)
             if (votante.RolId < 1 || votante.RolId > 3)
                 return BadRequest("Rol inválido.");
 
-            /*
-             Lógica de negocio
-             Un candidato no puede ser creado como administrador ni jefe de junta
-            */
+            // Un candidato no puede ser Admin (1) ni Jefe (3)
             if (votante.RolId == 1 || votante.RolId == 3)
             {
                 bool existeComoCandidato = await _context.Candidatos
@@ -75,11 +72,8 @@ namespace SistemaVotoAPI.Controllers
                     return Conflict("Un candidato no puede ser administrador ni jefe de junta.");
             }
 
-            /*
-             Lógica de consistencia
-             Si se envía una junta, debe existir
-            */
-            if (votante.JuntaId.HasValue)
+            // Si se envía una junta, debe existir
+            if (votante.JuntaId.HasValue && votante.JuntaId > 0)
             {
                 bool existeJunta = await _context.Juntas
                     .AnyAsync(j => j.Id == votante.JuntaId.Value);
@@ -87,17 +81,19 @@ namespace SistemaVotoAPI.Controllers
                 if (!existeJunta)
                     return BadRequest("La junta asignada no existe.");
             }
+            else
+            {
+                // Si viene 0 o negativo, lo dejamos nulo
+                votante.JuntaId = null;
+            }
 
-            /*
-             Lógica de seguridad
-             La contraseña se almacena siempre como hash
-            */
-            votante.Password = PasswordHasher.Hash(votante.Password);
+            // Hashear contraseña si viene
+            if (!string.IsNullOrEmpty(votante.Password))
+            {
+                votante.Password = PasswordHasher.Hash(votante.Password);
+            }
 
-            /*
-             Lógica de estado inicial
-             Todo votante se registra activo y sin haber votado
-            */
+            // Estado inicial
             votante.Estado = true;
             votante.HaVotado = false;
 
@@ -105,7 +101,6 @@ namespace SistemaVotoAPI.Controllers
             await _context.SaveChangesAsync();
 
             return CreatedAtAction(nameof(GetVotante), new { cedula = votante.Cedula }, votante);
-        
         }
 
         // PUT: api/Votantes/0102030405
@@ -113,23 +108,16 @@ namespace SistemaVotoAPI.Controllers
         public async Task<IActionResult> PutVotante(string cedula, Votante votante)
         {
             if (cedula != votante.Cedula)
-                return BadRequest();
+                return BadRequest("La cédula no coincide.");
 
             var existente = await _context.Votantes.FindAsync(cedula);
             if (existente == null)
                 return NotFound();
 
-            /*
-             Lógica de negocio
-             No se permite asignar rol de administrador o jefe de junta
-             a una persona que ya es candidata
-            */
-            if (votante.RolId != existente.RolId &&
-                (votante.RolId == 1 || votante.RolId == 3))
+            // Validación: Candidato no puede ser Admin/Jefe
+            if (votante.RolId != existente.RolId && (votante.RolId == 1 || votante.RolId == 3))
             {
-                bool esCandidato = await _context.Candidatos
-                    .AnyAsync(c => c.Cedula == cedula);
-
+                bool esCandidato = await _context.Candidatos.AnyAsync(c => c.Cedula == cedula);
                 if (esCandidato)
                     return Conflict("Un candidato no puede ser administrador ni jefe de junta.");
             }
@@ -139,12 +127,14 @@ namespace SistemaVotoAPI.Controllers
             existente.FotoUrl = votante.FotoUrl;
             existente.RolId = votante.RolId;
             existente.Estado = votante.Estado;
-            existente.JuntaId = votante.JuntaId;
 
-            /*
-             Lógica de seguridad
-             Solo se vuelve a hashear la contraseña si se envía una nueva
-            */
+            // Manejo correcto de JuntaId (permitir desasignar con null o 0)
+            if (votante.JuntaId.HasValue && votante.JuntaId > 0)
+                existente.JuntaId = votante.JuntaId;
+            else
+                existente.JuntaId = null;
+
+            // Solo actualizamos contraseña si viene texto nuevo
             if (!string.IsNullOrWhiteSpace(votante.Password))
             {
                 existente.Password = PasswordHasher.Hash(votante.Password);

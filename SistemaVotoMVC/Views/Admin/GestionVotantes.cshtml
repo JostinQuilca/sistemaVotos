@@ -3,17 +3,17 @@
     ViewData["Title"] = "Gestión de Votantes";
 }
 
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex justify-content-between align-items-center mb-4">
     <div>
-        <h3 class="fw-bold mb-0">👥 Gestión de Votantes</h3>
-        <small class="text-muted">Administra el padrón electoral.</small>
+        <h3 class="fw-bold text-primary mb-0"><i class="bi bi-people-fill"></i> Gestión de Votantes</h3>
+        <small class="text-muted">Administración del padrón electoral y roles de usuario.</small>
     </div>
 
     <div class="d-flex gap-2">
-        <a asp-action="Main" class="btn btn-outline-secondary">
+        <a asp-action="Main" class="btn btn-outline-secondary shadow-sm">
             <i class="bi bi-arrow-left"></i> Volver
         </a>
-        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalNuevo">
+        <button class="btn btn-primary shadow-sm" data-bs-toggle="modal" data-bs-target="#modalNuevo">
             <i class="bi bi-person-plus-fill"></i> Nuevo Votante
         </button>
     </div>
@@ -21,62 +21,101 @@
 
 @if (TempData["Mensaje"] != null)
 {
-    <div class="alert alert-success alert-dismissible fade show">@TempData["Mensaje"]<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+    <div class="alert alert-success alert-dismissible fade show shadow-sm">
+        <i class="bi bi-check-circle-fill me-2"></i> @TempData["Mensaje"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
 }
 @if (TempData["Error"] != null)
 {
-    <div class="alert alert-danger alert-dismissible fade show">@TempData["Error"]<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+    <div class="alert alert-danger alert-dismissible fade show shadow-sm">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i> @TempData["Error"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
 }
 
-<div class="card shadow-sm border-0">
-    <div class="card-body">
+<div class="card shadow border-0">
+    <div class="card-body p-0">
         <div class="table-responsive">
-            <table class="table table-hover align-middle">
-                <thead class="table-light">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="bg-light text-secondary">
                     <tr>
-                        <th>Foto</th>
+                        <th class="ps-4">Foto</th>
                         <th>Cédula</th>
                         <th>Nombre</th>
                         <th>Email</th>
                         <th>Rol</th>
-                        <th>Junta</th>
-                        <th>Acciones</th>
+                        <th>Junta Asignada</th>
+                        <th class="text-end pe-4">Acciones</th>
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var v in Model)
+                    @if (Model != null && Model.Any())
+                    {
+                        foreach (var v in Model)
+                        {
+                            <tr>
+                                <td class="ps-4">
+                                    @if (!string.IsNullOrEmpty(v.FotoUrl))
+                                    {
+                                        <img src="@v.FotoUrl" class="rounded-circle border" style="width: 40px; height: 40px; object-fit: cover;" />
+                                    }
+                                    else
+                                    {
+                                        <div class="bg-secondary bg-opacity-25 rounded-circle d-flex align-items-center justify-content-center text-secondary fw-bold" style="width: 40px; height: 40px;">
+                                            @(v.NombreCompleto?.Length > 0 ? v.NombreCompleto.Substring(0, 1) : "?")
+                                        </div>
+                                    }
+                                </td>
+                                <td class="fw-bold text-dark">@v.Cedula</td>
+                                <td>@v.NombreCompleto</td>
+                                <td class="text-muted small">@v.Email</td>
+                                <td>
+                                    @if (v.RolId == 1)
+                                    {
+                                        <span class="badge bg-danger"><i class="bi bi-shield-lock-fill"></i> ADMIN</span>
+                                    }
+                                    else if (v.RolId == 3)
+                                    {
+                                        <span class="badge bg-primary"><i class="bi bi-person-badge-fill"></i> JEFE JUNTA</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary"><i class="bi bi-person"></i> VOTANTE</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (v.JuntaId.HasValue && v.JuntaId > 0)
+                                    {
+                                        <span class="badge bg-info text-dark">Mesa @v.JuntaId</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted small">--</span>
+                                    }
+                                </td>
+                                <td class="text-end pe-4">
+                                    <div class="btn-group">
+                                        <button class="btn btn-outline-primary btn-sm" title="Editar"
+                                                onclick="abrirEditar('@v.Cedula', '@v.NombreCompleto', '@v.Email', @v.RolId, '@(v.JuntaId?.ToString() ?? "")', '@v.FotoUrl')">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                        <form asp-action="EliminarVotante" method="post" class="d-inline" onsubmit="return confirm('¿Está seguro de eliminar a @v.NombreCompleto?');">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="cedula" value="@v.Cedula" />
+                                            <button class="btn btn-outline-danger btn-sm" title="Eliminar">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
                     {
                         <tr>
-                            <td>
-                                @if (!string.IsNullOrEmpty(v.FotoUrl))
-                                {
-                                    <img src="@v.FotoUrl" class="rounded-circle" style="width: 40px; height: 40px; object-fit: cover;" />
-                                }
-                                else
-                                {
-                                    <div class="bg-secondary rounded-circle d-flex align-items-center justify-content-center text-white" style="width: 40px; height: 40px;">
-                                        @(v.NombreCompleto?.Substring(0, 1) ?? "?")
-                                    </div>
-                                }
-                            </td>
-                            <td>@v.Cedula</td>
-                            <td>@v.NombreCompleto</td>
-                            <td>@v.Email</td>
-                            <td>@(v.RolId == 1 ? "Admin" : "Votante")</td>
-                            <td>@(v.JuntaId?.ToString() ?? "N/A")</td>
-                            <td>
-                                <div class="btn-group">
-                                    <button class="btn btn-outline-primary btn-sm"
-                                            onclick="abrirEditar('@v.Cedula', '@v.NombreCompleto', '@v.Email', @v.RolId, '@(v.JuntaId?.ToString() ?? "")', '@v.FotoUrl')">
-                                        <i class="bi bi-pencil"></i>
-                                    </button>
-                                    <form asp-action="EliminarVotante" method="post" onsubmit="return confirm('¿Borrar a @v.NombreCompleto?');">
-                                        @Html.AntiForgeryToken()
-                                        <input type="hidden" name="cedula" value="@v.Cedula" />
-                                        <button class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i></button>
-                                    </form>
-                                </div>
-                            </td>
+                            <td colspan="7" class="text-center py-4 text-muted">No hay usuarios registrados.</td>
                         </tr>
                     }
                 </tbody>
@@ -90,36 +129,46 @@
         <form asp-action="CrearVotante" method="post" class="modal-content">
             @Html.AntiForgeryToken()
             <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title">Nuevo Usuario</h5>
+                <h5 class="modal-title fw-bold"><i class="bi bi-person-plus"></i> Nuevo Usuario</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <label class="fw-bold">Cédula</label>
-                <input name="Cedula" class="form-control mb-2" required maxlength="10" />
-
-                <label class="fw-bold">Nombre Completo</label>
-                <input name="NombreCompleto" class="form-control mb-2" required />
-
-                <label class="fw-bold">Email</label>
-                <input name="Email" type="email" class="form-control mb-2" required />
-
-                <label class="fw-bold">URL de la Foto (Opcional)</label>
-                <input name="FotoUrl" class="form-control mb-2" placeholder="https://ejemplo.com/foto.jpg" />
-
-                <label class="fw-bold">Rol</label>
-                <select name="RolId" class="form-select mb-2">
-                    <option value="2">Votante</option>
-                    <option value="1">Administrador</option>
-                </select>
-
-                <label class="fw-bold">Junta ID</label>
-                <input name="JuntaId" type="number" class="form-control mb-2" placeholder="Ej: 1001" />
-
-                <label class="fw-bold">Contraseña</label>
-                <input name="Password" type="password" class="form-control mb-2" />
+                <div class="mb-2">
+                    <label class="fw-bold form-label">Cédula</label>
+                    <input name="Cedula" class="form-control" required maxlength="10" placeholder="Ej: 1002003004" />
+                </div>
+                <div class="mb-2">
+                    <label class="fw-bold form-label">Nombre Completo</label>
+                    <input name="NombreCompleto" class="form-control" required />
+                </div>
+                <div class="mb-2">
+                    <label class="fw-bold form-label">Email</label>
+                    <input name="Email" type="email" class="form-control" required />
+                </div>
+                <div class="mb-2">
+                    <label class="fw-bold form-label">Rol</label>
+                    <select name="RolId" class="form-select">
+                        <option value="2">Votante (Estándar)</option>
+                        <option value="1">Administrador</option>
+                        <option value="3">Jefe de Junta</option>
+                    </select>
+                </div>
+                <div class="mb-2">
+                    <label class="fw-bold form-label">Junta ID (Opcional)</label>
+                    <input name="JuntaId" type="number" class="form-control" placeholder="Ej: 1001" />
+                </div>
+                <div class="mb-2">
+                    <label class="fw-bold form-label">Contraseña</label>
+                    <input name="Password" type="password" class="form-control" required />
+                </div>
+                <div class="mb-2">
+                    <label class="fw-bold form-label">URL Foto (Opcional)</label>
+                    <input name="FotoUrl" class="form-control" placeholder="https://..." />
+                </div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-primary w-100">Guardar</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button class="btn btn-primary px-4 fw-bold">Guardar</button>
             </div>
         </form>
     </div>
@@ -130,38 +179,55 @@
         <form asp-action="EditarVotante" method="post" class="modal-content">
             @Html.AntiForgeryToken()
             <div class="modal-header bg-info text-white">
-                <h5 class="modal-title">Editar Usuario</h5>
+                <h5 class="modal-title fw-bold"><i class="bi bi-pencil-square"></i> Editar Usuario</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
                 <input type="hidden" name="Cedula" id="editCedulaHidden" />
 
-                <label class="fw-bold">Cédula</label>
-                <input id="editCedulaDisplay" class="form-control mb-2" disabled />
+                <div class="mb-2">
+                    <label class="fw-bold form-label">Cédula</label>
+                    <input id="editCedulaDisplay" class="form-control bg-light" disabled />
+                </div>
 
-                <label class="fw-bold">Nombre</label>
-                <input name="NombreCompleto" id="editNombre" class="form-control mb-2" required />
+                <div class="mb-2">
+                    <label class="fw-bold form-label">Nombre Completo</label>
+                    <input name="NombreCompleto" id="editNombre" class="form-control" required />
+                </div>
 
-                <label class="fw-bold">Email</label>
-                <input name="Email" id="editEmail" class="form-control mb-2" required />
+                <div class="mb-2">
+                    <label class="fw-bold form-label">Email</label>
+                    <input name="Email" id="editEmail" class="form-control" required />
+                </div>
 
-                <label class="fw-bold">URL de la Foto</label>
-                <input name="FotoUrl" id="editFoto" class="form-control mb-2" placeholder="https://..." />
+                <div class="mb-2">
+                    <label class="fw-bold form-label">Rol</label>
+                    <select name="RolId" id="editRol" class="form-select">
+                        <option value="2">Votante (Estándar)</option>
+                        <option value="1">Administrador</option>
+                        <option value="3">Jefe de Junta</option>
+                    </select>
+                </div>
 
-                <label class="fw-bold">Rol</label>
-                <select name="RolId" id="editRol" class="form-select mb-2">
-                    <option value="2">Votante</option>
-                    <option value="1">Administrador</option>
-                </select>
+                <div class="mb-2">
+                    <label class="fw-bold form-label">Junta ID</label>
+                    <input name="JuntaId" id="editJunta" type="number" class="form-control" />
+                    <div class="form-text">Deje vacío o en 0 para desasignar.</div>
+                </div>
 
-                <label class="fw-bold">Junta ID</label>
-                <input name="JuntaId" id="editJunta" type="number" class="form-control mb-2" />
+                <div class="mb-2">
+                    <label class="fw-bold form-label">Nueva Contraseña</label>
+                    <input name="Password" type="password" class="form-control" placeholder="(Sin cambios)" />
+                </div>
 
-                <label class="fw-bold">Nueva Contraseña (Dejar vacío para no cambiar)</label>
-                <input name="Password" type="password" class="form-control mb-2" />
+                <div class="mb-2">
+                    <label class="fw-bold form-label">URL Foto</label>
+                    <input name="FotoUrl" id="editFoto" class="form-control" />
+                </div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-info text-white w-100">Actualizar</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button class="btn btn-info text-white px-4 fw-bold">Actualizar</button>
             </div>
         </form>
     </div>
@@ -176,6 +242,7 @@
         document.getElementById('editRol').value = rol;
         document.getElementById('editJunta').value = junta;
         document.getElementById('editFoto').value = foto;
+
         new bootstrap.Modal(document.getElementById('modalEditar')).show();
     }
 </script>
