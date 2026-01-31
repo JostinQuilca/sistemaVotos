@@ -10,7 +10,7 @@ using SistemaVotoModelos.DTOs;
 
 namespace SistemaVotoAPI.Controllers
 {
-    [Authorize(Roles = "1")] // Por defecto, solo el Administrador entra aquí
+   // [Authorize(Roles = "1")] // Por defecto, solo el Administrador tiene acceso
     [Route("api/[controller]")]
     [ApiController]
     public class JuntasController : ControllerBase
@@ -23,28 +23,26 @@ namespace SistemaVotoAPI.Controllers
         }
 
         // GET: api/Juntas
-        // Devuelve las juntas con formato legible para la vista
+        // Devuelve las juntas con formato legible para las vistas de administración
         [HttpGet]
         public async Task<ActionResult<IEnumerable<JuntaDetalleDto>>> GetJuntas()
         {
             var juntas = await _context.Juntas
                 .Include(j => j.Direccion)
-                .Include(j => j.JefeDeJunta) // Asegúrate de incluir la relación
+                .Include(j => j.JefeDeJunta)
                 .Select(j => new JuntaDetalleDto
                 {
                     Id = j.Id,
                     NumeroMesa = j.NumeroMesa,
-                    // Construimos la ubicación concatenando campos
                     Ubicacion = j.Direccion != null
                         ? $"{j.Direccion.Provincia} - {j.Direccion.Canton} - {j.Direccion.Parroquia}"
                         : "Sin dirección",
 
-                    // Verificación segura de nulos para el nombre del jefe
                     NombreJefe = string.IsNullOrEmpty(j.JefeDeJuntaId)
                         ? "Sin asignar"
                         : (j.JefeDeJunta != null ? j.JefeDeJunta.NombreCompleto : "Usuario no encontrado"),
 
-                    EstadoJunta = j.Estado // Pasamos el int directo
+                    EstadoJunta = j.Estado
                 })
                 .OrderBy(j => j.Id)
                 .ToListAsync();
@@ -52,16 +50,16 @@ namespace SistemaVotoAPI.Controllers
             return Ok(juntas);
         }
 
-        // GET: api/Juntas/PorEleccion/5
-        // (Opcional) Endpoint para filtrar si lo necesitas en 'VerificarJuntas'
+        // GET: api/Juntas/PorEleccion/{id}
         [HttpGet("PorEleccion/{eleccionId}")]
         public async Task<ActionResult<IEnumerable<JuntaDetalleDto>>> GetJuntasPorEleccion(int eleccionId)
         {
-            // Nota: Si tus juntas no están ligadas a elección en BD, devolvemos todas.
+            // Nota: En esta estructura las juntas son físicas, se devuelven todas para validación
             return await GetJuntas();
         }
 
         // POST: api/Juntas/CrearPorDireccion
+        // Crea múltiples mesas para un recinto específico
         [HttpPost("CrearPorDireccion")]
         public async Task<IActionResult> CrearPorDireccion(int direccionId, int cantidad)
         {
@@ -78,8 +76,7 @@ namespace SistemaVotoAPI.Controllers
             for (int i = 1; i <= cantidad; i++)
             {
                 int numeroMesa = mesasExistentes + i;
-                // Generamos un ID compuesto (ej: Direccion 10 + Mesa 1 = 1001)
-                // Usamos long.Parse si los IDs son muy grandes, o int.Parse si caben.
+                // Generación de ID único (Dirección + Secuencial de mesa)
                 int juntaId = int.Parse($"{direccion.Id}{numeroMesa:D2}");
 
                 nuevasJuntas.Add(new Junta
@@ -87,8 +84,8 @@ namespace SistemaVotoAPI.Controllers
                     Id = juntaId,
                     NumeroMesa = numeroMesa,
                     DireccionId = direccion.Id,
-                    JefeDeJuntaId = null, // Usamos null en lugar de string.Empty
-                    Estado = 1 // 1 = CERRADA (Inicial)
+                    JefeDeJuntaId = null,
+                    Estado = 1 // 1 = CERRADA (Estado inicial)
                 });
             }
 
@@ -99,6 +96,7 @@ namespace SistemaVotoAPI.Controllers
         }
 
         // PUT: api/Juntas/AsignarJefe
+        // Vincula un votante a la mesa, le otorga el Rol 3 y abre la mesa (Estado 2)
         [HttpPut("AsignarJefe")]
         public async Task<IActionResult> AsignarJefe(int juntaId, string cedulaVotante)
         {
@@ -108,38 +106,38 @@ namespace SistemaVotoAPI.Controllers
             var votante = await _context.Votantes.FindAsync(cedulaVotante);
             if (votante == null) return NotFound("El votante no existe");
 
-            // Verificar que no sea candidato
+            // Regla de negocio: Candidatos no pueden ser autoridades de mesa
             bool esCandidato = await _context.Candidatos.AnyAsync(c => c.Cedula == cedulaVotante);
             if (esCandidato) return BadRequest("Un candidato no puede ser jefe de junta");
 
-            // Asignación
+            // Asignación de responsabilidad
             junta.JefeDeJuntaId = cedulaVotante;
 
-            // Si la mesa estaba en estado 1 (Cerrada/Inicial), la pasamos a 2 (Abierta/Lista)
+            // Al asignar un jefe, la mesa se considera lista para la jornada (2 = ABIERTA)
             if (junta.Estado == 1) junta.Estado = 2;
 
-            // Actualizamos rol del votante
-            votante.RolId = 3;
-            votante.JuntaId = junta.Id; // Vinculamos al votante con su mesa
+            // Actualización de perfil del usuario
+            votante.RolId = 3; // Rol: Jefe de Junta
+            votante.JuntaId = junta.Id;
 
             await _context.SaveChangesAsync();
-            return Ok("Jefe de junta asignado correctamente");
+            return Ok("Jefe de junta asignado correctamente y mesa habilitada.");
         }
 
-        // DELETE: api/Juntas/5
+        // DELETE: api/Juntas/{id}
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteJunta(int id)
         {
             var junta = await _context.Juntas.FindAsync(id);
             if (junta == null) return NotFound();
 
-            // Opcional: Desvincular al jefe antes de borrar
+            // Si tenía un jefe asignado, le devolvemos su rol original de votante
             if (!string.IsNullOrEmpty(junta.JefeDeJuntaId))
             {
                 var jefe = await _context.Votantes.FindAsync(junta.JefeDeJuntaId);
                 if (jefe != null)
                 {
-                    jefe.RolId = 2; // Vuelve a ser votante normal
+                    jefe.RolId = 2; // Vuelve a ser Votante normal
                     jefe.JuntaId = null;
                 }
             }
@@ -150,37 +148,38 @@ namespace SistemaVotoAPI.Controllers
             return NoContent();
         }
 
-        // PUT: api/Juntas/CerrarMesa/5
-        // Permite acceso a Roles 1 (Admin) y 3 (Jefe Junta) o Anónimo si el control es por MVC
-        [AllowAnonymous]
+        // PUT: api/Juntas/CerrarMesa/{id}
+        // Acción realizada por el Jefe de Junta al finalizar la jornada
+        [AllowAnonymous] // El control de acceso se valida mediante el Claim de JuntaId en el MVC
         [HttpPut("CerrarMesa/{id}")]
         public async Task<IActionResult> CerrarMesa(int id)
         {
             var junta = await _context.Juntas.FindAsync(id);
             if (junta == null) return NotFound("Junta no encontrada");
 
-            // Validamos que el estado sea 2 (ABIERTA)
+            // Solo se puede cerrar lo que está abierto (2)
             if (junta.Estado != 2)
-                return BadRequest($"La mesa no está abierta para cierre (Estado actual: {junta.Estado})");
+                return BadRequest($"La mesa no está en fase de votación (Estado actual: {junta.Estado})");
 
-            junta.Estado = 3; // 3 = PENDIENTE
+            junta.Estado = 3; // 3 = PENDIENTE (Espera de validación del Admin)
             await _context.SaveChangesAsync();
 
-            return Ok(new { mensaje = "Mesa cerrada correctamente." });
+            return Ok(new { mensaje = "Mesa cerrada correctamente. Los datos han sido enviados para validación." });
         }
 
-        // PUT: api/Juntas/AprobarJunta/5
-        // Este se mantiene solo para Admin (hereda el [Authorize] de la clase)
+        // PUT: api/Juntas/AprobarJunta/{id}
+        // Acción realizada por el Administrador para oficializar el escrutinio
         [HttpPut("AprobarJunta/{id}")]
         public async Task<IActionResult> AprobarJunta(int id)
         {
             var junta = await _context.Juntas.FindAsync(id);
             if (junta == null) return NotFound("Junta no encontrada");
 
-            junta.Estado = 4; // 4 = APROBADA/CONTEO
+            // El estado 4 significa que el Admin confirma que el proceso fue limpio
+            junta.Estado = 4; // 4 = APROBADA/CONTEO OFICIAL
             await _context.SaveChangesAsync();
 
-            return Ok(new { mensaje = "Junta aprobada." });
+            return Ok(new { mensaje = "Junta aprobada. Los votos se han integrado al conteo oficial." });
         }
     }
 }

@@ -1,10 +1,12 @@
 ﻿using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
-using SistemaVotoModelos.DTOs; // <--- USAMOS ESTE, que está en la biblioteca compartida
-using SistemaVotoMVC.Models; // Aquí debe estar tu LoginViewModel
+using SistemaVotoModelos.DTOs;
+using SistemaVotoMVC.Models;
 using System.Net.Http.Json;
 using System.Security.Claims;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace SistemaVotoMVC.Controllers
 {
@@ -20,12 +22,11 @@ namespace SistemaVotoMVC.Controllers
         [HttpGet]
         public IActionResult Login()
         {
-            // Si ya está logueado, redirigir según rol
             if (User.Identity!.IsAuthenticated)
             {
-                if (User.IsInRole("1")) return RedirectToAction("Main", "Admin"); // Admin
-                if (User.IsInRole("2")) return RedirectToAction("Index", "Votacion"); // Votante
-                if (User.IsInRole("3")) return RedirectToAction("Index", "Junta"); // Jefe Junta
+                if (User.IsInRole("1")) return RedirectToAction("Main", "Admin");
+                if (User.IsInRole("2")) return RedirectToAction("Index", "Votacion");
+                if (User.IsInRole("3")) return RedirectToAction("Index", "Junta");
             }
             return View(new LoginViewModel());
         }
@@ -37,7 +38,6 @@ namespace SistemaVotoMVC.Controllers
 
             var client = _httpClientFactory.CreateClient("SistemaVotoAPI");
 
-            // Ahora usa LoginRequestDto de SistemaVotoModelos.DTOs
             var response = await client.PostAsJsonAsync("api/Aut/LoginGestion", new LoginRequestDto
             {
                 Cedula = model.Cedula,
@@ -50,7 +50,6 @@ namespace SistemaVotoMVC.Controllers
                 return View(model);
             }
 
-            // Ahora usa LoginResponseDto de SistemaVotoModelos.DTOs
             var usuario = await response.Content.ReadFromJsonAsync<LoginResponseDto>();
 
             if (usuario == null)
@@ -59,7 +58,7 @@ namespace SistemaVotoMVC.Controllers
                 return View(model);
             }
 
-            // --- CREACIÓN DE LA SESIÓN (COOKIE) ---
+            // CREACIÓN DE LA SESIÓN (COOKIE)
             var claims = new List<Claim>
             {
                 new Claim(ClaimTypes.NameIdentifier, usuario.Cedula),
@@ -67,8 +66,8 @@ namespace SistemaVotoMVC.Controllers
                 new Claim(ClaimTypes.Role, usuario.RolId.ToString())
             };
 
-            if (usuario.JuntaId.HasValue)
-                claims.Add(new Claim("JuntaId", usuario.JuntaId.Value.ToString()));
+            // Aseguramos que el Claim de JuntaId siempre exista para evitar errores de nulos
+            claims.Add(new Claim("JuntaId", usuario.JuntaId?.ToString() ?? "0"));
 
             var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
 
@@ -77,10 +76,21 @@ namespace SistemaVotoMVC.Controllers
                 new ClaimsPrincipal(identity)
             );
 
-            // --- REDIRECCIÓN SEGÚN ROL ---
+            // REDIRECCIÓN SEGÚN ROL
             if (usuario.RolId == 1) return RedirectToAction("Main", "Admin");
             if (usuario.RolId == 2) return RedirectToAction("Index", "Votacion");
-            if (usuario.RolId == 3) return RedirectToAction("Index", "Junta");
+
+            if (usuario.RolId == 3)
+            {
+                // Validación de seguridad para Jefe de Junta sin mesa asignada
+                if (!usuario.JuntaId.HasValue || usuario.JuntaId == 0)
+                {
+                    await HttpContext.SignOutAsync();
+                    ModelState.AddModelError("", "Usuario Jefe de Junta sin mesa asignada. Contacte al administrador.");
+                    return View(model);
+                }
+                return RedirectToAction("Index", "Junta");
+            }
 
             return RedirectToAction("Index", "Home");
         }

@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using SistemaVotoAPI.Data;
 using SistemaVotoModelos.DTOs;
+using SistemaVotoAPI.Security; // Necesario para PasswordHasher
 using System;
 using System.Threading.Tasks;
 
@@ -18,13 +19,9 @@ namespace SistemaVotoAPI.Controllers
             _context = context;
         }
 
-        // ==========================================
-        // LOGIN
-        // ==========================================
         [HttpPost("LoginGestion")]
         public async Task<IActionResult> LoginGestion([FromBody] LoginRequestDto request)
         {
-            // 1. Validar que enviaron datos
             if (request == null || string.IsNullOrEmpty(request.Cedula) || string.IsNullOrEmpty(request.Password))
             {
                 return BadRequest("Datos de inicio de sesión incompletos.");
@@ -32,7 +29,7 @@ namespace SistemaVotoAPI.Controllers
 
             try
             {
-                // 2. Buscar usuario (Debe estar ACTIVO)
+                // Buscar usuario activo
                 var usuario = await _context.Votantes
                     .FirstOrDefaultAsync(v => v.Cedula == request.Cedula && v.Estado == true);
 
@@ -41,16 +38,16 @@ namespace SistemaVotoAPI.Controllers
                     return Unauthorized("Usuario no encontrado o inactivo.");
                 }
 
-                // 3. Validar Contraseña (¡USANDO TRIM!)
-                string passIngresado = request.Password.Trim();
-                string passEnBD = (usuario.Password ?? "").Trim();
+                // VERIFICACIÓN DE HASH
+                // Comparamos la contraseña en texto plano con el hash de la BD
+                bool esValida = PasswordHasher.Verify(request.Password.Trim(), usuario.Password);
 
-                if (passIngresado != passEnBD)
+                if (!esValida)
                 {
                     return Unauthorized("Cédula o contraseña incorrecta.");
                 }
 
-                // 4. Login Exitoso: Preparamos la respuesta
+                // Login Exitoso
                 var response = new LoginResponseDto
                 {
                     Cedula = usuario.Cedula,
@@ -69,27 +66,16 @@ namespace SistemaVotoAPI.Controllers
             }
         }
 
-        // ==========================================
-        // CONTROL DE VOTOS (NUEVO)
-        // ==========================================
-
-        // EN: SistemaVotoAPI / Controllers / AutController.cs
-
         [HttpPut("MarcarVoto/{cedula}")]
         public async Task<IActionResult> MarcarVoto(string cedula)
         {
             if (string.IsNullOrEmpty(cedula)) return BadRequest("Cédula inválida");
-
-            // Buscamos el usuario ignorando espacios
             var usuario = await _context.Votantes
                 .FirstOrDefaultAsync(v => v.Cedula.Trim() == cedula.Trim());
 
             if (usuario == null) return NotFound($"Usuario con cédula {cedula} no encontrado.");
 
-            // Actualizamos
             usuario.HaVotado = true;
-
-            // Forzamos la marca de modificado
             _context.Entry(usuario).State = EntityState.Modified;
 
             try
@@ -107,7 +93,7 @@ namespace SistemaVotoAPI.Controllers
         public async Task<IActionResult> VerificarEstado(string cedula)
         {
             var usuario = await _context.Votantes
-                .AsNoTracking() // Más rápido
+                .AsNoTracking()
                 .FirstOrDefaultAsync(v => v.Cedula.Trim() == cedula.Trim());
 
             if (usuario == null) return NotFound("Usuario no encontrado");

@@ -345,30 +345,24 @@ namespace SistemaVotoMVC.Controllers
         public async Task<IActionResult> GestionJuntas()
         {
             var client = _httpClientFactory.CreateClient("SistemaVotoAPI");
-
-            // 1. Obtener Juntas
-            // Nota: Usamos el DTO específico para mostrar detalles bonitos (Ubicación, Jefe, etc.)
             var response = await client.GetAsync(_endpointJuntas);
             var juntas = response.IsSuccessStatusCode
                 ? await response.Content.ReadFromJsonAsync<List<JuntaDetalleDto>>()
                 : new List<JuntaDetalleDto>();
 
-            // 2. Obtener Direcciones (Para crear nuevas juntas)
             var respDir = await client.GetAsync(_endpointDirecciones);
             ViewBag.Direcciones = respDir.IsSuccessStatusCode
                 ? await respDir.Content.ReadFromJsonAsync<List<Direccion>>()
                 : new List<Direccion>();
 
-            // 3. Obtener Votantes (Para asignar jefes)
             var respVot = await client.GetAsync(_endpointVotantes);
             var votantes = respVot.IsSuccessStatusCode
                 ? await respVot.Content.ReadFromJsonAsync<List<Votante>>()
                 : new List<Votante>();
 
-            // Filtramos para mostrar solo posibles jefes
             ViewBag.PosiblesJefes = votantes?.OrderBy(v => v.NombreCompleto).ToList();
 
-            return View(juntas);
+            return View(juntas); // Esto buscará automáticamente GestionJuntas.cshtml
         }
 
         [HttpPost]
