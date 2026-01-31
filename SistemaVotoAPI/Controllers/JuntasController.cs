@@ -6,11 +6,12 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SistemaVotoAPI.Data;
 using SistemaVotoModelos;
+
 using SistemaVotoModelos.DTOs;
 
 namespace SistemaVotoAPI.Controllers
 {
-   // [Authorize(Roles = "1")] // Por defecto, solo el Administrador tiene acceso
+    // [Authorize(Roles = "1")] // Por defecto, solo el Administrador tiene acceso
     [Route("api/[controller]")]
     [ApiController]
     public class JuntasController : ControllerBase
@@ -54,51 +55,90 @@ namespace SistemaVotoAPI.Controllers
         [HttpGet("PorEleccion/{eleccionId}")]
         public async Task<ActionResult<IEnumerable<JuntaDetalleDto>>> GetJuntasPorEleccion(int eleccionId)
         {
-            // Nota: En esta estructura las juntas son físicas, se devuelven todas para validación
-            return await GetJuntas();
+            // Si en el futuro deseas filtrar por EleccionId, descomenta la versión filtrada.
+            // Por ahora mantenemos la misma respuesta que GetJuntas para compatibilidad.
+            // return await GetJuntas();
+
+            var juntas = await _context.Juntas
+                .Where(j => j.EleccionId == eleccionId)
+                .Include(j => j.Direccion)
+                .Include(j => j.JefeDeJunta)
+                .Select(j => new JuntaDetalleDto
+                {
+                    Id = j.Id,
+                    NumeroMesa = j.NumeroMesa,
+                    Ubicacion = j.Direccion != null
+                        ? $"{j.Direccion.Provincia} - {j.Direccion.Canton} - {j.Direccion.Parroquia}"
+                        : "Sin dirección",
+
+                    NombreJefe = string.IsNullOrEmpty(j.JefeDeJuntaId)
+                        ? "Sin asignar"
+                        : (j.JefeDeJunta != null ? j.JefeDeJunta.NombreCompleto : "Usuario no encontrado"),
+
+                    EstadoJunta = j.Estado
+                })
+                .OrderBy(j => j.Id)
+                .ToListAsync();
+
+            return Ok(juntas);
         }
 
-        // POST: api/Juntas/CrearPorDireccion
-        // Crea múltiples mesas para un recinto específico
+        // POST: api/Juntas/crear/{direccionId}/{cantidad}
         [HttpPost("CrearPorDireccion")]
-        public async Task<IActionResult> CrearPorDireccion(int direccionId, int cantidad)
+        public async Task<IActionResult> CrearPorDireccion(
+          [FromQuery] int direccionId,
+          [FromQuery] int cantidad)
+
         {
             var direccion = await _context.Direcciones.FindAsync(direccionId);
-            if (direccion == null) return BadRequest("La dirección no existe");
 
-            if (cantidad <= 0) return BadRequest("La cantidad debe ser mayor a cero");
+            if (direccion == null)
+                return NotFound("Dirección no encontrada.");
 
-            int mesasExistentes = await _context.Juntas
-                .CountAsync(j => j.DireccionId == direccionId);
+            if (cantidad <= 0)
+                return BadRequest("La cantidad debe ser mayor a cero.");
+
+            // ⭐ OBTENER ELECCIÓN ACTIVA
+            var eleccionActiva = await _context.Elecciones
+                .FirstOrDefaultAsync(e => e.Estado == "ACTIVA");
+
+            if (eleccionActiva == null)
+                return BadRequest("No existe una elección activa.");
+
+            int juntasExistentes = await _context.Juntas
+    .CountAsync(j => j.DireccionId == direccionId
+                  && j.EleccionId == eleccionActiva.Id);
+
 
             var nuevasJuntas = new List<Junta>();
 
             for (int i = 1; i <= cantidad; i++)
             {
-                int numeroMesa = mesasExistentes + i;
-                // Generación de ID único (Dirección + Secuencial de mesa)
-                int juntaId = int.Parse($"{direccion.Id}{numeroMesa:D2}");
+                int numeroMesa = juntasExistentes + i;
 
                 nuevasJuntas.Add(new Junta
                 {
-                    Id = juntaId,
+                    // Id es identity (bigint) en la BD; no lo seteamos aquí
                     NumeroMesa = numeroMesa,
-                    DireccionId = direccion.Id,
+                    DireccionId = direccionId,
+                    Estado = 1,
                     JefeDeJuntaId = null,
-                    Estado = 1 // 1 = CERRADA (Estado inicial)
+
+                    // ⭐ Asignamos la elección activa (EleccionId es int en tu esquema)
+                    EleccionId = eleccionActiva.Id
                 });
             }
 
             _context.Juntas.AddRange(nuevasJuntas);
             await _context.SaveChangesAsync();
 
-            return Ok("Juntas creadas correctamente");
+            return Ok("Mesas creadas correctamente.");
         }
 
         // PUT: api/Juntas/AsignarJefe
         // Vincula un votante a la mesa, le otorga el Rol 3 y abre la mesa (Estado 2)
         [HttpPut("AsignarJefe")]
-        public async Task<IActionResult> AsignarJefe(int juntaId, string cedulaVotante)
+        public async Task<IActionResult> AsignarJefe(long juntaId, string cedulaVotante)
         {
             var junta = await _context.Juntas.FindAsync(juntaId);
             if (junta == null) return NotFound("Junta no encontrada");
@@ -126,7 +166,7 @@ namespace SistemaVotoAPI.Controllers
 
         // DELETE: api/Juntas/{id}
         [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteJunta(int id)
+        public async Task<IActionResult> DeleteJunta(long id)
         {
             var junta = await _context.Juntas.FindAsync(id);
             if (junta == null) return NotFound();
@@ -152,7 +192,7 @@ namespace SistemaVotoAPI.Controllers
         // Acción realizada por el Jefe de Junta al finalizar la jornada
         [AllowAnonymous] // El control de acceso se valida mediante el Claim de JuntaId en el MVC
         [HttpPut("CerrarMesa/{id}")]
-        public async Task<IActionResult> CerrarMesa(int id)
+        public async Task<IActionResult> CerrarMesa(long id)
         {
             var junta = await _context.Juntas.FindAsync(id);
             if (junta == null) return NotFound("Junta no encontrada");
@@ -170,7 +210,7 @@ namespace SistemaVotoAPI.Controllers
         // PUT: api/Juntas/AprobarJunta/{id}
         // Acción realizada por el Administrador para oficializar el escrutinio
         [HttpPut("AprobarJunta/{id}")]
-        public async Task<IActionResult> AprobarJunta(int id)
+        public async Task<IActionResult> AprobarJunta(long id)
         {
             var junta = await _context.Juntas.FindAsync(id);
             if (junta == null) return NotFound("Junta no encontrada");

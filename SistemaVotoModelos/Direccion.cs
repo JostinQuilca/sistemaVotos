@@ -1,19 +1,13 @@
-﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel.DataAnnotations;
-using System.Text;
+﻿namespace SistemaVotoModelos;
 
-namespace SistemaVotoModelos
+public class Direccion
 {
-    public class Direccion
-    {
-        [Key]
-        public int Id { get; set; }
-        [Required]
-        public string Provincia { get; set; } = string.Empty;
-        [Required]
-        public string Canton { get; set; } = string.Empty;
-        [Required]
-        public string Parroquia { get; set; } = string.Empty;
-    }
+    public int Id { get; set; }
+
+    public string Provincia { get; set; } = null!;
+    public string Canton { get; set; } = null!;
+    public string Parroquia { get; set; } = null!;
+
+    public ICollection<Junta>? Juntas { get; set; }
+    public ICollection<VotoAnonimo>? VotosAnonimos { get; set; }
 }

@@ -2,9 +2,9 @@
 
 public class JuntaDetalleDto
 {
-    public int Id { get; set; }
+    public long Id { get; set; }          // bigint de la BD
     public int NumeroMesa { get; set; }
     public string Ubicacion { get; set; } = string.Empty;
     public string NombreJefe { get; set; } = string.Empty;
-    public int EstadoJunta { get; set; } // <--- DEBE SER INT
+    public int EstadoJunta { get; set; }
 }

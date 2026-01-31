@@ -2,7 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using SistemaVotoAPI.Data;
 using SistemaVotoModelos.DTOs;
-using SistemaVotoAPI.Security; // Necesario para PasswordHasher
+using SistemaVotoAPI.Security;
 using System;
 using System.Threading.Tasks;
 
@@ -29,17 +29,14 @@ namespace SistemaVotoAPI.Controllers
 
             try
             {
-                // Buscar usuario activo
                 var usuario = await _context.Votantes
-                    .FirstOrDefaultAsync(v => v.Cedula == request.Cedula && v.Estado == true);
+                    .FirstOrDefaultAsync(v => v.Cedula == request.Cedula && v.Estado);
 
                 if (usuario == null)
                 {
                     return Unauthorized("Usuario no encontrado o inactivo.");
                 }
 
-                // VERIFICACIÓN DE HASH
-                // Comparamos la contraseña en texto plano con el hash de la BD
                 bool esValida = PasswordHasher.Verify(request.Password.Trim(), usuario.Password);
 
                 if (!esValida)
@@ -47,7 +44,6 @@ namespace SistemaVotoAPI.Controllers
                     return Unauthorized("Cédula o contraseña incorrecta.");
                 }
 
-                // Login Exitoso
                 var response = new LoginResponseDto
                 {
                     Cedula = usuario.Cedula,
@@ -55,7 +51,11 @@ namespace SistemaVotoAPI.Controllers
                     Email = usuario.Email ?? "Sin email",
                     FotoUrl = usuario.FotoUrl,
                     RolId = usuario.RolId,
-                    JuntaId = usuario.JuntaId
+
+                    // 🔴 AQUÍ ESTABA EL ERROR CS0266
+                    // usuario.JuntaId es long?
+                    // DTO espera int?
+                    JuntaId = usuario.JuntaId.HasValue ? (int?)usuario.JuntaId.Value : null
                 };
 
                 return Ok(response);
@@ -69,11 +69,14 @@ namespace SistemaVotoAPI.Controllers
         [HttpPut("MarcarVoto/{cedula}")]
         public async Task<IActionResult> MarcarVoto(string cedula)
         {
-            if (string.IsNullOrEmpty(cedula)) return BadRequest("Cédula inválida");
+            if (string.IsNullOrEmpty(cedula))
+                return BadRequest("Cédula inválida");
+
             var usuario = await _context.Votantes
                 .FirstOrDefaultAsync(v => v.Cedula.Trim() == cedula.Trim());
 
-            if (usuario == null) return NotFound($"Usuario con cédula {cedula} no encontrado.");
+            if (usuario == null)
+                return NotFound($"Usuario con cédula {cedula} no encontrado.");
 
             usuario.HaVotado = true;
             _context.Entry(usuario).State = EntityState.Modified;
@@ -96,7 +99,8 @@ namespace SistemaVotoAPI.Controllers
                 .AsNoTracking()
                 .FirstOrDefaultAsync(v => v.Cedula.Trim() == cedula.Trim());
 
-            if (usuario == null) return NotFound("Usuario no encontrado");
+            if (usuario == null)
+                return NotFound("Usuario no encontrado");
 
             return Ok(usuario.HaVotado);
         }
