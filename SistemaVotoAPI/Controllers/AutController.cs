@@ -2,7 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using SistemaVotoAPI.Data;
 using SistemaVotoModelos.DTOs;
-using SistemaVotoAPI.Security;
+using SistemaVotoAPI.Security; // Asegúrate de que este namespace coincida con tu clase PasswordHasher
 using System;
 using System.Threading.Tasks;
 using System.Linq;
@@ -44,7 +44,7 @@ namespace SistemaVotoAPI.Controllers
                 string passIngresada = request.Password.Trim();
 
                 // ---------------------------------------------------------
-                // NIVEL 1: Verificar Contraseña en Texto Plano (Lo más probable en tus datos actuales)
+                // NIVEL 1: Verificar Contraseña en Texto Plano (Recuperación/Legacy)
                 // ---------------------------------------------------------
                 if (usuario.Password == passIngresada)
                 {
@@ -52,19 +52,22 @@ namespace SistemaVotoAPI.Controllers
                 }
 
                 // ---------------------------------------------------------
-                // NIVEL 2: Verificar Contraseña Encriptada (Si usaste el Hasher)
+                // NIVEL 2: Verificar Contraseña Encriptada (Hash Nuevo)
                 // ---------------------------------------------------------
                 if (!accesoConcedido)
                 {
-                    // El try-catch evita que explote si la contraseña en BD no es un hash válido
                     try
                     {
+                        // Usa tu PasswordHasher actualizado (100k iteraciones)
                         if (PasswordHasher.Verify(passIngresada, usuario.Password))
                         {
                             accesoConcedido = true;
                         }
                     }
-                    catch { /* No era un hash, ignoramos este error */ }
+                    catch
+                    {
+                        // Si el formato en BD no es un hash válido (ej. texto antiguo), ignoramos el error
+                    }
                 }
 
                 // ---------------------------------------------------------
@@ -72,7 +75,6 @@ namespace SistemaVotoAPI.Controllers
                 // ---------------------------------------------------------
                 if (!accesoConcedido)
                 {
-                    // Buscamos si la "contraseña" escrita es en realidad un Token válido
                     var tokenValido = await _context.TokensAcceso
                         .FirstOrDefaultAsync(t => t.VotanteId == usuario.Cedula
                                                && t.Codigo == passIngresada
@@ -81,9 +83,7 @@ namespace SistemaVotoAPI.Controllers
                     if (tokenValido != null)
                     {
                         accesoConcedido = true;
-                        // Opcional: Si quieres quemar el token al usarlo, descomenta esto:
-                        // tokenValido.EsValido = false;
-                        // await _context.SaveChangesAsync();
+                        // Opcional: tokenValido.EsValido = false; await _context.SaveChangesAsync();
                     }
                 }
 
@@ -152,6 +152,21 @@ namespace SistemaVotoAPI.Controllers
                 return NotFound("Usuario no encontrado");
 
             return Ok(usuario.HaVotado);
+        }
+
+        // Diagnóstico (Opcional, útil si algo falla de nuevo)
+        [HttpGet("VerUsuario/{cedula}")]
+        public async Task<IActionResult> VerUsuario(string cedula)
+        {
+            var v = await _context.Votantes.AsNoTracking().FirstOrDefaultAsync(x => x.Cedula == cedula);
+            if (v == null) return NotFound("No existe");
+            return Ok(new
+            {
+                Cedula = v.Cedula,
+                PasswordGuardada = v.Password,
+                Estado = v.Estado,
+                Rol = v.RolId
+            });
         }
     }
 }

@@ -1,0 +1,41 @@
+﻿@{
+    Layout = "_Layout";
+    ViewData["Title"] = "Mesa No Disponible";
+}
+
+<div class="container d-flex flex-column align-items-center justify-content-center" style="min-height: 70vh;">
+
+    <div class="card shadow-lg border-0 p-5 text-center" style="max-width: 600px; width: 100%;">
+
+        <div class="mb-4">
+            <i class="bi bi-cone-striped text-warning" style="font-size: 5rem;"></i>
+        </div>
+
+        <h2 class="fw-bold text-dark mb-3">Acceso Restringido</h2>
+
+        <p class="fs-5 text-danger fw-bold">
+            @ViewBag.Mensaje
+        </p>
+
+        <p class="text-muted">
+            No puede acceder a la votación en este momento.<br>
+            Verifique con el Jefe de Junta o el personal de soporte.
+        </p>
+
+        @if (ViewBag.DebugInfo != null)
+        {
+            <div class="alert alert-secondary mt-4 text-start font-monospace small bg-light border-secondary">
+                <p class="mb-1 fw-bold text-dark"><i class="bi bi-bug-fill"></i> Información Técnica:</p>
+                @ViewBag.DebugInfo
+            </div>
+        }
+
+        <div class="mt-4">
+            <a asp-controller="Aut" asp-action="Logout" class="btn btn-dark px-4 fw-bold">
+                <i class="bi bi-box-arrow-left"></i> Cerrar Sesión y Volver
+            </a>
+        </div>
+
+    </div>
+
+</div>

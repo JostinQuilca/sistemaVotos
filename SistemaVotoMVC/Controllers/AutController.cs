@@ -22,6 +22,7 @@ namespace SistemaVotoMVC.Controllers
         [HttpGet]
         public IActionResult Login()
         {
+            // Si ya está autenticado, redirigir según su rol para no mostrar login de nuevo
             if (User.Identity!.IsAuthenticated)
             {
                 if (User.IsInRole("1")) return RedirectToAction("Main", "Admin");
@@ -38,17 +39,29 @@ namespace SistemaVotoMVC.Controllers
 
             var client = _httpClientFactory.CreateClient("SistemaVotoAPI");
 
+            // Enviamos las credenciales a la API
             var response = await client.PostAsJsonAsync("api/Aut/LoginGestion", new LoginRequestDto
             {
                 Cedula = model.Cedula,
                 Password = model.Password
             });
 
+            // --- CORRECCIÓN CLAVE AQUÍ ---
             if (!response.IsSuccessStatusCode)
             {
-                ModelState.AddModelError("", "Cédula o contraseña incorrecta.");
+                // Leemos el mensaje real que devuelve la API (Ej: "Usuario inactivo", "No encontrado")
+                var mensajeError = await response.Content.ReadAsStringAsync();
+
+                // Limpieza por si viene con comillas extra
+                mensajeError = mensajeError.Trim('"');
+
+                if (string.IsNullOrEmpty(mensajeError))
+                    mensajeError = "Cédula o contraseña incorrecta.";
+
+                ModelState.AddModelError("", mensajeError);
                 return View(model);
             }
+            // -----------------------------
 
             var usuario = await response.Content.ReadFromJsonAsync<LoginResponseDto>();
 
@@ -86,7 +99,7 @@ namespace SistemaVotoMVC.Controllers
                 if (!usuario.JuntaId.HasValue || usuario.JuntaId == 0)
                 {
                     await HttpContext.SignOutAsync();
-                    ModelState.AddModelError("", "Usuario Jefe de Junta sin mesa asignada. Contacte al administrador.");
+                    ModelState.AddModelError("", "Usted es Jefe de Junta pero no tiene una mesa asignada. Contacte al administrador.");
                     return View(model);
                 }
                 return RedirectToAction("Index", "Junta");

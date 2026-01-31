@@ -20,9 +20,11 @@ namespace SistemaVotoMVC.Controllers
         public async Task<IActionResult> Index()
         {
             var juntaClaim = User.FindFirst("JuntaId")?.Value;
-            // Asumimos que el "Name" del usuario logueado es su Cédula (según configuración estándar de Identity)
-            // O buscamos el claim específico si usas uno diferente.
-            var cedulaJefe = User.Identity?.Name;
+
+            // --- CORRECCIÓN AQUÍ ---
+            // Usamos NameIdentifier que es donde guardamos la CÉDULA en el Login
+            var cedulaJefe = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            // -----------------------
 
             if (string.IsNullOrEmpty(juntaClaim) || juntaClaim == "0")
             {
@@ -43,16 +45,16 @@ namespace SistemaVotoMVC.Controllers
                 ViewBag.DatosJunta = await responseJunta.Content.ReadFromJsonAsync<JsonElement>();
                 var votantes = await responseVotantes.Content.ReadFromJsonAsync<List<JsonElement>>();
 
-                // --- LÓGICA NUEVA PARA EL VOTO DEL JEFE ---
-                bool jefeHaVotado = true; // Por defecto true para no mostrar botón si falla algo
+                // --- LÓGICA PARA EL VOTO DEL JEFE ---
+                bool jefeHaVotado = true; // Por defecto pesimista
                 string nombreJefe = "Jefe de Mesa";
 
                 if (votantes != null && !string.IsNullOrEmpty(cedulaJefe))
                 {
-                    // Buscamos al jefe en la lista de votantes de esta mesa
+                    // Ahora sí comparamos Cédula con Cédula
                     var datosJefe = votantes.FirstOrDefault(v => v.GetProperty("cedula").GetString() == cedulaJefe);
 
-                    // Verificamos si existe (ValueKind no es Undefined)
+                    // Si lo encontramos en la lista, tomamos su estado real
                     if (datosJefe.ValueKind != JsonValueKind.Undefined)
                     {
                         jefeHaVotado = datosJefe.GetProperty("haVotado").GetBoolean();
@@ -60,12 +62,11 @@ namespace SistemaVotoMVC.Controllers
                     }
                 }
 
-                // Pasamos estos datos a la vista
                 ViewBag.CedulaJefe = cedulaJefe;
                 ViewBag.NombreJefe = nombreJefe;
                 ViewBag.JefeHaVotado = jefeHaVotado;
 
-                // Ordenamos la lista
+                // Ordenamos: Pendientes primero
                 var votantesOrdenados = votantes?
                     .OrderBy(v => v.GetProperty("haVotado").GetBoolean())
                     .ThenBy(v => v.GetProperty("nombreCompleto").GetString())
@@ -77,49 +78,47 @@ namespace SistemaVotoMVC.Controllers
             return View(new List<JsonElement>());
         }
 
-        // ACCIÓN PARA GENERAR EL TOKEN (Llama a la API)
+        // ACCIÓN PARA GENERAR EL TOKEN
         [HttpPost]
         public async Task<IActionResult> GenerarToken(string cedula)
         {
             var client = _httpClientFactory.CreateClient("SistemaVotoAPI");
-
-            // Llamamos al nuevo controlador TokensController que creamos arriba
             var response = await client.PostAsync($"api/Tokens/Generar/{cedula}", null);
 
             if (response.IsSuccessStatusCode)
             {
-                var resultado = await response.Content.ReadFromJsonAsync<dynamic>();
-                // Retornamos el token al JavaScript de la vista
+                var resultado = await response.Content.ReadFromJsonAsync<JsonElement>();
                 return Json(new { success = true, token = resultado.GetProperty("token").ToString() });
             }
             else
             {
-                return Json(new { success = false, message = "Error al conectar con el servidor." });
+                return Json(new { success = false, message = "Error al generar token." });
             }
         }
+
+        // CERRAR MESA
         [HttpPost]
         public async Task<IActionResult> CerrarMesa()
         {
-            // Recuperamos el ID de la cookie
             var juntaClaim = User.FindFirst("JuntaId")?.Value;
-            if (string.IsNullOrEmpty(juntaClaim)) return RedirectToAction("Login", "Aut");
+            if (string.IsNullOrEmpty(juntaClaim)) return Json(new { success = false, message = "Sesión inválida" });
 
-            int juntaId = int.Parse(juntaClaim);
+            long juntaId = long.Parse(juntaClaim);
             var client = _httpClientFactory.CreateClient("SistemaVotoAPI");
 
-            // Llamamos a la API para cambiar estado a PENDIENTE
             var response = await client.PutAsync($"api/Juntas/CerrarMesa/{juntaId}", null);
 
             if (response.IsSuccessStatusCode)
             {
-                return Json(new { success = true, message = "Mesa cerrada. Esperando confirmación del Admin." });
+                return Json(new { success = true, message = "Mesa cerrada correctamente." });
             }
             else
             {
                 return Json(new { success = false, message = "Error al cerrar la mesa." });
             }
         }
-        // ACCIÓN: INICIAR MESA (Cuando está en estado 1)
+
+        // INICIAR MESA
         [HttpPost]
         public async Task<IActionResult> IniciarMesa()
         {

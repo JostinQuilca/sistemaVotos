@@ -2,7 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using SistemaVotoAPI.Data;
 using SistemaVotoModelos;
-using SistemaVotoAPI.Security;
+using SistemaVotoAPI.Security; // Asegúrate de que este namespace coincida con tu clase PasswordHasher
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -29,7 +29,7 @@ namespace SistemaVotoAPI.Controllers
                 .ToListAsync();
         }
 
-        // GET: api/Votantes/0102030405
+        // GET: api/Votantes/cedula
         [HttpGet("{cedula}")]
         public async Task<ActionResult<Votante>> GetVotante(string cedula)
         {
@@ -41,7 +41,7 @@ namespace SistemaVotoAPI.Controllers
             return votante;
         }
 
-        // GET: api/Votantes/PorJunta/3
+        // GET: api/Votantes/PorJunta/id
         [HttpGet("PorJunta/{juntaId}")]
         public async Task<ActionResult<IEnumerable<Votante>>> GetVotantesPorJunta(int juntaId)
         {
@@ -50,7 +50,7 @@ namespace SistemaVotoAPI.Controllers
                 .ToListAsync();
         }
 
-        // POST: api/Votantes
+        // POST: api/Votantes (CREAR)
         [HttpPost]
         public async Task<ActionResult<Votante>> PostVotante(Votante votante)
         {
@@ -85,7 +85,7 @@ namespace SistemaVotoAPI.Controllers
                 votante.JuntaId = null;
             }
 
-            // Hashear contraseña si viene
+            // HASHEAR CONTRASEÑA NUEVA (Usando el nuevo hasher de 100k)
             if (!string.IsNullOrEmpty(votante.Password))
             {
                 votante.Password = PasswordHasher.Hash(votante.Password);
@@ -101,15 +101,14 @@ namespace SistemaVotoAPI.Controllers
             return CreatedAtAction(nameof(GetVotante), new { cedula = votante.Cedula }, votante);
         }
 
-        // PUT: api/Votantes/0102030405
+        // PUT: api/Votantes/cedula (EDITAR)
         [HttpPut("{cedula}")]
         public async Task<IActionResult> PutVotante(string cedula, Votante votante)
         {
             if (cedula != votante.Cedula)
                 return BadRequest("La cédula no coincide.");
 
-            // 1. Buscamos el usuario original en la BD (sin rastrear para no bloquear)
-            // Esto es crucial para no perder la contraseña si no la envían
+            // 1. Buscamos el usuario original en la BD (sin rastrear)
             var existente = await _context.Votantes.AsNoTracking()
                 .FirstOrDefaultAsync(v => v.Cedula == cedula);
 
@@ -124,31 +123,30 @@ namespace SistemaVotoAPI.Controllers
                     return Conflict("Un candidato no puede ser administrador ni jefe de junta.");
             }
 
-            // 2. Adjuntamos y marcamos como modificado
-            // PERO CUIDADO: La contraseña la manejamos manualmente abajo
             _context.Entry(votante).State = EntityState.Modified;
 
-            // Manejo correcto de JuntaId (permitir desasignar con null o 0)
+            // --- PROTECCIÓN CONTRA EL BUG DE BLOQUEO ---
+            // Aseguramos que el estado sea TRUE al editar (o mantenemos el existente)
+            votante.Estado = true;
+            votante.HaVotado = existente.HaVotado;
+
+            // Manejo correcto de JuntaId
             if (votante.JuntaId.HasValue && votante.JuntaId > 0)
                 votante.JuntaId = votante.JuntaId;
             else
                 votante.JuntaId = null;
 
-            // 3. LÓGICA DE CONTRASEÑA SEGURA
-            // Si la contraseña viene vacía o nula, MANTENEMOS la que ya tenía en la BD
+            // LÓGICA DE CONTRASEÑA SEGURA
             if (string.IsNullOrWhiteSpace(votante.Password))
             {
+                // Si viene vacía, MANTENEMOS la que ya tenía
                 votante.Password = existente.Password;
             }
             else
             {
-                // Si viene una nueva, la hasheamos
+                // Si viene nueva, la HASHEAMOS con el nuevo algoritmo
                 votante.Password = PasswordHasher.Hash(votante.Password.Trim());
             }
-
-            // Mantenemos otros campos sensibles que no deberían cambiar en un edit simple
-            votante.Estado = existente.Estado;
-            votante.HaVotado = existente.HaVotado;
 
             try
             {
@@ -165,7 +163,7 @@ namespace SistemaVotoAPI.Controllers
             return NoContent();
         }
 
-        // DELETE: api/Votantes/0102030405
+        // DELETE: api/Votantes/cedula
         [HttpDelete("{cedula}")]
         public async Task<IActionResult> DeleteVotante(string cedula)
         {
