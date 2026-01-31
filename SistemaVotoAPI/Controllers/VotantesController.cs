@@ -21,7 +21,6 @@ namespace SistemaVotoAPI.Controllers
         }
 
         // GET: api/Votantes
-        // IMPORTANTE: Devuelve TODOS los usuarios para que el Admin los gestione.
         [HttpGet]
         public async Task<ActionResult<IEnumerable<Votante>>> GetVotantes()
         {
@@ -83,7 +82,6 @@ namespace SistemaVotoAPI.Controllers
             }
             else
             {
-                // Si viene 0 o negativo, lo dejamos nulo
                 votante.JuntaId = null;
             }
 
@@ -110,7 +108,11 @@ namespace SistemaVotoAPI.Controllers
             if (cedula != votante.Cedula)
                 return BadRequest("La cédula no coincide.");
 
-            var existente = await _context.Votantes.FindAsync(cedula);
+            // 1. Buscamos el usuario original en la BD (sin rastrear para no bloquear)
+            // Esto es crucial para no perder la contraseña si no la envían
+            var existente = await _context.Votantes.AsNoTracking()
+                .FirstOrDefaultAsync(v => v.Cedula == cedula);
+
             if (existente == null)
                 return NotFound();
 
@@ -122,25 +124,44 @@ namespace SistemaVotoAPI.Controllers
                     return Conflict("Un candidato no puede ser administrador ni jefe de junta.");
             }
 
-            existente.NombreCompleto = votante.NombreCompleto;
-            existente.Email = votante.Email;
-            existente.FotoUrl = votante.FotoUrl;
-            existente.RolId = votante.RolId;
-            existente.Estado = votante.Estado;
+            // 2. Adjuntamos y marcamos como modificado
+            // PERO CUIDADO: La contraseña la manejamos manualmente abajo
+            _context.Entry(votante).State = EntityState.Modified;
 
             // Manejo correcto de JuntaId (permitir desasignar con null o 0)
             if (votante.JuntaId.HasValue && votante.JuntaId > 0)
-                existente.JuntaId = votante.JuntaId;
+                votante.JuntaId = votante.JuntaId;
             else
-                existente.JuntaId = null;
+                votante.JuntaId = null;
 
-            // Solo actualizamos contraseña si viene texto nuevo
-            if (!string.IsNullOrWhiteSpace(votante.Password))
+            // 3. LÓGICA DE CONTRASEÑA SEGURA
+            // Si la contraseña viene vacía o nula, MANTENEMOS la que ya tenía en la BD
+            if (string.IsNullOrWhiteSpace(votante.Password))
             {
-                existente.Password = PasswordHasher.Hash(votante.Password);
+                votante.Password = existente.Password;
+            }
+            else
+            {
+                // Si viene una nueva, la hasheamos
+                votante.Password = PasswordHasher.Hash(votante.Password.Trim());
             }
 
-            await _context.SaveChangesAsync();
+            // Mantenemos otros campos sensibles que no deberían cambiar en un edit simple
+            votante.Estado = existente.Estado;
+            votante.HaVotado = existente.HaVotado;
+
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                if (!await _context.Votantes.AnyAsync(e => e.Cedula == cedula))
+                    return NotFound();
+                else
+                    throw;
+            }
+
             return NoContent();
         }
 

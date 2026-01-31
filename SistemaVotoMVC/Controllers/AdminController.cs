@@ -1,7 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SistemaVotoModelos;
-using SistemaVotoModelos.DTOs; // Asegúrate de tener este using para los DTOs
+using SistemaVotoModelos.DTOs;
 using System.Net.Http.Json;
 
 namespace SistemaVotoMVC.Controllers
@@ -34,22 +34,32 @@ namespace SistemaVotoMVC.Controllers
         }
 
         // ==========================================
-        // GESTIÓN DE VOTANTES
+        // GESTIÓN DE VOTANTES (MEJORADO CON COMBOBOX JUNTAS)
         // ==========================================
         [HttpGet]
         public async Task<IActionResult> GestionVotantes()
         {
             var client = _httpClientFactory.CreateClient("SistemaVotoAPI");
-            var response = await client.GetAsync(_endpointVotantes);
 
-            var lista = response.IsSuccessStatusCode
-                ? await response.Content.ReadFromJsonAsync<List<Votante>>() ?? new List<Votante>()
+            // 1. Obtener Votantes
+            var responseVotantes = await client.GetAsync(_endpointVotantes);
+            var listaVotantes = responseVotantes.IsSuccessStatusCode
+                ? await responseVotantes.Content.ReadFromJsonAsync<List<Votante>>() ?? new List<Votante>()
                 : new List<Votante>();
 
-            if (!response.IsSuccessStatusCode)
+            if (!responseVotantes.IsSuccessStatusCode)
                 TempData["Error"] = "No se pudo obtener la lista de votantes.";
 
-            return View(lista);
+            // 2. Obtener Juntas (PARA LLENAR EL COMBOBOX EN LA VISTA)
+            var responseJuntas = await client.GetAsync(_endpointJuntas);
+            var listaJuntas = responseJuntas.IsSuccessStatusCode
+                ? await responseJuntas.Content.ReadFromJsonAsync<List<JuntaDetalleDto>>() ?? new List<JuntaDetalleDto>()
+                : new List<JuntaDetalleDto>();
+
+            // Pasamos las juntas a la vista ordenadas
+            ViewBag.JuntasDisponibles = listaJuntas.OrderBy(j => j.NumeroMesa).ToList();
+
+            return View(listaVotantes);
         }
 
         [HttpPost]
@@ -337,25 +347,23 @@ namespace SistemaVotoMVC.Controllers
             return View();
         }
 
-        // ==========================================
-        // GESTIÓN DE JUNTAS (VERSIÓN MEJORADA)
-        // ==========================================
-
-        // ==========================================
-        // GESTIÓN DE JUNTAS (CORRECTO)
-        // ==========================================
-
         [HttpGet]
         public async Task<IActionResult> GestionJuntas()
         {
             var client = _httpClientFactory.CreateClient("SistemaVotoAPI");
 
+            // 1. Obtener Juntas
             var juntas = await client.GetFromJsonAsync<List<JuntaDetalleDto>>(_endpointJuntas);
+
+            // 2. Obtener Direcciones
             var direcciones = await client.GetFromJsonAsync<List<Direccion>>(_endpointDirecciones);
-            var votantes = await client.GetFromJsonAsync<List<Votante>>(_endpointVotantes);
+
+            // 3. OBTENER POSIBLES JEFES (Usando el nuevo endpoint filtrado)
+            // Esto traerá solo los Rol 3 que realmente NO están dirigiendo ninguna mesa.
+            var posiblesJefes = await client.GetFromJsonAsync<List<Votante>>($"{_endpointJuntas}/PosiblesJefes");
 
             ViewBag.Direcciones = direcciones ?? new List<Direccion>();
-            ViewBag.PosiblesJefes = votantes ?? new List<Votante>();
+            ViewBag.PosiblesJefes = posiblesJefes ?? new List<Votante>();
 
             return View(juntas ?? new List<JuntaDetalleDto>());
         }
@@ -386,8 +394,6 @@ namespace SistemaVotoMVC.Controllers
             return RedirectToAction(nameof(GestionJuntas));
         }
 
-
-
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> EliminarJunta(int id)
@@ -396,10 +402,6 @@ namespace SistemaVotoMVC.Controllers
             await client.DeleteAsync($"{_endpointJuntas}/{id}");
             return RedirectToAction(nameof(GestionJuntas));
         }
-
-        // ==========================================
-        // FUNCIONALIDADES ADICIONALES (DE TU VERSIÓN ANTERIOR)
-        // ==========================================
 
         [HttpPost]
         [ValidateAntiForgeryToken]
@@ -412,7 +414,6 @@ namespace SistemaVotoMVC.Controllers
             }
 
             var client = _httpClientFactory.CreateClient("SistemaVotoAPI");
-            // Nota: Asegúrate de que este endpoint exista en tu API actual
             var response = await client.PutAsync($"{_endpointJuntas}/AprobarJunta/{id}", null);
 
             if (response.IsSuccessStatusCode)
@@ -422,6 +423,10 @@ namespace SistemaVotoMVC.Controllers
 
             return RedirectToAction(nameof(GestionJuntas));
         }
+
+        // ==========================================
+        // VERIFICACIÓN DE JUNTAS
+        // ==========================================
 
         [HttpGet]
         public async Task<IActionResult> VerificarJuntas(int? eleccionId)
@@ -449,7 +454,6 @@ namespace SistemaVotoMVC.Controllers
                 return View(new List<JuntaDetalleDto>());
             }
 
-            // Nota: Este endpoint debe existir en tu API para filtrar por elección
             var respJuntas = await client.GetAsync($"{_endpointJuntas}/PorEleccion/{eleccionId}");
             var juntas = respJuntas.IsSuccessStatusCode
                 ? await respJuntas.Content.ReadFromJsonAsync<List<JuntaDetalleDto>>() ?? new List<JuntaDetalleDto>()

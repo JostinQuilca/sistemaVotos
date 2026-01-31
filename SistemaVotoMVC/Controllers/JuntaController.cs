@@ -1,7 +1,8 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
 using System.Net.Http.Json;
+using System.Security.Claims;
+using System.Text.Json;
 
 namespace SistemaVotoMVC.Controllers
 {
@@ -18,29 +19,62 @@ namespace SistemaVotoMVC.Controllers
         // PANTALLA PRINCIPAL DE LA JUNTA
         public async Task<IActionResult> Index()
         {
-            // Recuperamos el ID de la Junta desde la cookie
             var juntaClaim = User.FindFirst("JuntaId")?.Value;
+            // Asumimos que el "Name" del usuario logueado es su Cédula (según configuración estándar de Identity)
+            // O buscamos el claim específico si usas uno diferente.
+            var cedulaJefe = User.Identity?.Name;
+
             if (string.IsNullOrEmpty(juntaClaim) || juntaClaim == "0")
             {
                 return RedirectToAction("Login", "Aut");
             }
 
-            int juntaId = int.Parse(juntaClaim);
+            long juntaId = long.Parse(juntaClaim);
             var client = _httpClientFactory.CreateClient("SistemaVotoAPI");
 
-            // Llamamos a la API para obtener datos de la junta y sus votantes
+            // 1. Obtener datos de la Junta
             var responseJunta = await client.GetAsync($"api/Juntas/{juntaId}");
+
+            // 2. Obtener votantes de esta junta
             var responseVotantes = await client.GetAsync($"api/Votantes/PorJunta/{juntaId}");
 
             if (responseJunta.IsSuccessStatusCode && responseVotantes.IsSuccessStatusCode)
             {
-                ViewBag.DatosJunta = await responseJunta.Content.ReadFromJsonAsync<object>();
-                var votantes = await responseVotantes.Content.ReadFromJsonAsync<List<object>>();
-                return View(votantes);
+                ViewBag.DatosJunta = await responseJunta.Content.ReadFromJsonAsync<JsonElement>();
+                var votantes = await responseVotantes.Content.ReadFromJsonAsync<List<JsonElement>>();
+
+                // --- LÓGICA NUEVA PARA EL VOTO DEL JEFE ---
+                bool jefeHaVotado = true; // Por defecto true para no mostrar botón si falla algo
+                string nombreJefe = "Jefe de Mesa";
+
+                if (votantes != null && !string.IsNullOrEmpty(cedulaJefe))
+                {
+                    // Buscamos al jefe en la lista de votantes de esta mesa
+                    var datosJefe = votantes.FirstOrDefault(v => v.GetProperty("cedula").GetString() == cedulaJefe);
+
+                    // Verificamos si existe (ValueKind no es Undefined)
+                    if (datosJefe.ValueKind != JsonValueKind.Undefined)
+                    {
+                        jefeHaVotado = datosJefe.GetProperty("haVotado").GetBoolean();
+                        nombreJefe = datosJefe.GetProperty("nombreCompleto").GetString();
+                    }
+                }
+
+                // Pasamos estos datos a la vista
+                ViewBag.CedulaJefe = cedulaJefe;
+                ViewBag.NombreJefe = nombreJefe;
+                ViewBag.JefeHaVotado = jefeHaVotado;
+
+                // Ordenamos la lista
+                var votantesOrdenados = votantes?
+                    .OrderBy(v => v.GetProperty("haVotado").GetBoolean())
+                    .ThenBy(v => v.GetProperty("nombreCompleto").GetString())
+                    .ToList();
+
+                return View(votantesOrdenados);
             }
 
-            // Si falla, mostramos lista vacía
-            return View(new List<object>());
+            return View(new List<JsonElement>());
         }
 
         // ACCIÓN PARA GENERAR EL TOKEN (Llama a la API)
@@ -83,6 +117,27 @@ namespace SistemaVotoMVC.Controllers
             else
             {
                 return Json(new { success = false, message = "Error al cerrar la mesa." });
+            }
+        }
+        // ACCIÓN: INICIAR MESA (Cuando está en estado 1)
+        [HttpPost]
+        public async Task<IActionResult> IniciarMesa()
+        {
+            var juntaClaim = User.FindFirst("JuntaId")?.Value;
+            if (string.IsNullOrEmpty(juntaClaim)) return Json(new { success = false, message = "Sesión inválida" });
+
+            long juntaId = long.Parse(juntaClaim);
+            var client = _httpClientFactory.CreateClient("SistemaVotoAPI");
+
+            var response = await client.PutAsync($"api/Juntas/IniciarJornada/{juntaId}", null);
+
+            if (response.IsSuccessStatusCode)
+            {
+                return Json(new { success = true, message = "Mesa abierta exitosamente." });
+            }
+            else
+            {
+                return Json(new { success = false, message = "Error al abrir mesa." });
             }
         }
     }

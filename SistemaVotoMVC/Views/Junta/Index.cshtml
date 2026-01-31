@@ -1,181 +1,435 @@
-﻿@{
-    Layout = null;
-    // Recuperamos el objeto dinámico de la Junta
-    var datosJunta = ViewBag.DatosJunta as System.Text.Json.JsonElement?;
-    string estadoJunta = "ABIERTA"; // Valor por defecto
-    
-    if (datosJunta.HasValue && datosJunta.Value.TryGetProperty("estado", out var propEstado))
+﻿@using System.Text.Json
+@{
+    Layout = "_Layout";
+    ViewData["Title"] = "Panel de Mesa";
+
+    var datosJunta = (JsonElement?)ViewBag.DatosJunta;
+
+    // --- VARIABLES DE DATOS DE LA JUNTA ---
+    int estado = 1;
+    long idJunta = 0;
+    int numeroMesa = 0;
+    string ubicacion = "Desconocida";
+
+    if (datosJunta.HasValue)
     {
-        estadoJunta = propEstado.GetString() ?? "ABIERTA";
-    }
-}
-@model IEnumerable<dynamic>
-
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="utf-8" />
-    <title>Gestión de Mesa</title>
-    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" />
-</head>
-<body class="bg-light">
-
-    <div class="container mt-4">
-        <div class="d-flex justify-content-between align-items-center mb-4 p-3 bg-white shadow-sm rounded">
-            <div>
-                <h4 class="mb-0 text-primary">🗳️ Mesa Directiva</h4>
-                <span class="badge @(estadoJunta == "ABIERTA" ? "bg-success" : estadoJunta == "PENDIENTE" ? "bg-warning text-dark" : "bg-primary")">
-                    ESTADO: @estadoJunta
-                </span>
-            </div>
-            
-            @if(estadoJunta == "ABIERTA") 
-            {
-                <button class="btn btn-danger fw-bold" onclick="cerrarMesa()">
-                    <i class="bi bi-door-closed"></i> CERRAR MESA
-                </button>
-            }
-            else
-            {
-                <a asp-controller="Aut" asp-action="Logout" class="btn btn-outline-dark btn-sm">
-                    <i class="bi bi-box-arrow-right"></i> Salir
-                </a>
-            }
-        </div>
-
-        @if(estadoJunta != "ABIERTA")
+        // 1. Obtener Estado
+        if (datosJunta.Value.TryGetProperty("estadoJunta", out var propEstado))
         {
-            <div class="card shadow border-warning text-center p-5 mt-5">
-                <div class="card-body">
-                    <i class="bi bi-hourglass-split text-warning" style="font-size: 4rem;"></i>
-                    <h2 class="mt-3">Mesa Cerrada</h2>
-                    <p class="fs-5 text-muted">
-                        Esta mesa ha finalizado la recepción de votos.
-                        <br />
-                        Estado actual: <strong>Esperando Aprobación del Administrador</strong>.
-                    </p>
-                    <div class="alert alert-info d-inline-block mt-3">
-                        Ya no se pueden generar tokens ni habilitar votantes.
+            estado = propEstado.GetInt32();
+        }
+        else if (datosJunta.Value.TryGetProperty("estado", out var propEstadoOld))
+        {
+            estado = propEstadoOld.GetInt32();
+        }
+
+        // 2. Obtener ID y Número de Mesa
+        if (datosJunta.Value.TryGetProperty("id", out var propId))
+        {
+            idJunta = propId.GetInt64();
+        }
+
+        if (datosJunta.Value.TryGetProperty("numeroMesa", out var propMesa))
+        {
+            numeroMesa = propMesa.GetInt32();
+        }
+
+        // 3. Obtener Ubicación
+        if (datosJunta.Value.TryGetProperty("ubicacion", out var propUbi))
+        {
+            ubicacion = propUbi.GetString() ?? "Sin ubicación";
+        }
+        else if (datosJunta.Value.TryGetProperty("direccion", out var dir))
+        {
+            ubicacion = $"{dir.GetProperty("provincia")} - {dir.GetProperty("canton")}";
+        }
+    }
+
+    // --- VARIABLES DE ESTADÍSTICAS ---
+    var listaVotantes = Model as List<JsonElement>;
+    int totalVotantes = listaVotantes?.Count ?? 0;
+    int hanVotado = listaVotantes?.Count(v => v.GetProperty("haVotado").GetBoolean()) ?? 0;
+    int pendientes = totalVotantes - hanVotado;
+    double avance = totalVotantes > 0 ? (double)hanVotado / totalVotantes * 100 : 0;
+
+    // --- VARIABLES DEL JEFE (Para su propio voto) ---
+    bool jefeYaVoto = ViewBag.JefeHaVotado != null && (bool)ViewBag.JefeHaVotado;
+    string cedulaJefe = ViewBag.CedulaJefe as string ?? "";
+    string nombreJefe = ViewBag.NombreJefe as string ?? "Jefe de Mesa";
+}
+
+<div class="container mt-4">
+
+    @* --- ENCABEZADO DE MESA --- *@
+    <div class="card shadow-sm border-0 mb-4 bg-white">
+        <div class="card-body d-flex justify-content-between align-items-center flex-wrap">
+            <div>
+                <h2 class="fw-bold text-primary mb-0">🗳️ Mesa Electoral N° @numeroMesa</h2>
+                <p class="text-muted mb-0">
+                    <i class="bi bi-geo-alt-fill"></i> @ubicacion | ID Sistema: #@idJunta
+                </p>
+            </div>
+
+            <div class="text-end">
+                @if (estado == 2) // ESTADO: ABIERTA
+                {
+                    <div class="mb-2">
+                        <span class="badge bg-success fs-6 px-3 py-2">🟢 EN PROCESO DE VOTACIÓN</span>
+                    </div>
+
+                    @* --- SECCIÓN DE VOTO DEL JEFE --- *@
+                    @if (!jefeYaVoto)
+                    {
+                        <button class="btn btn-warning btn-sm fw-bold me-2 shadow-sm"
+                                onclick="habilitarVoto('@cedulaJefe', '@nombreJefe (TÚ)')">
+                            <i class="bi bi-person-raised-hand"></i> Ejercer mi Voto
+                        </button>
+                    }
+                    else
+                    {
+                        <span class="badge bg-light text-success border border-success me-2 py-2">
+                            <i class="bi bi-check-circle-fill"></i> Ya has votado
+                        </span>
+                    }
+
+                    @* BOTÓN DE CIERRE *@
+                    <button class="btn btn-outline-danger btn-sm fw-bold" onclick="confirmarCierre()">
+                        <i class="bi bi-stop-circle-fill"></i> Finalizar Jornada
+                    </button>
+                }
+                else if (estado == 1) // ESTADO: CREADA / ASIGNADA (Por iniciar)
+                {
+                    <span class="badge bg-info text-dark fs-6 px-3 py-2">⚪ LISTA PARA INICIAR</span>
+                }
+                else if (estado == 3) // ESTADO: PENDIENTE
+                {
+                    <span class="badge bg-warning text-dark fs-6 px-3 py-2">🟠 PENDIENTE DE APROBACIÓN</span>
+                }
+                else if (estado == 4) // ESTADO: APROBADA
+                {
+                    <span class="badge bg-primary fs-6 px-3 py-2">🔵 ESCRUTINIO OFICIALIZADO</span>
+                }
+                else
+                {
+                    <span class="badge bg-secondary fs-6 px-3 py-2">⚪ ESTADO: @estado</span>
+                }
+            </div>
+        </div>
+    </div>
+
+    @* --- LÓGICA DE VISTAS SEGÚN ESTADO --- *@
+
+    @if (estado == 2) // MESA ABIERTA: MUESTRA EL PADRÓN
+    {
+        <div class="row mb-4">
+            @* Tarjetas de Resumen *@
+            <div class="col-md-4">
+                <div class="card bg-primary text-white shadow-sm h-100">
+                    <div class="card-body text-center">
+                        <h3>@totalVotantes</h3>
+                        <small>Total Padrón</small>
                     </div>
                 </div>
             </div>
-        }
-        else
-        {
-            <div class="card border-primary mb-4">
-                 <div class="card-body bg-primary text-white bg-opacity-75">
-                    @if (datosJunta != null)
-                    {
-                        <div class="row text-center">
-                            <div class="col-md-6"><h5>Junta ID: <span class="badge bg-white text-primary">@datosJunta.Value.GetProperty("id")</span></h5></div>
-                            <div class="col-md-6"><h5>Mesa N°: <span class="badge bg-white text-primary">@datosJunta.Value.GetProperty("numeroMesa")</span></h5></div>
-                        </div>
-                    }
+            <div class="col-md-4">
+                <div class="card bg-success text-white shadow-sm h-100">
+                    <div class="card-body text-center">
+                        <h3>@hanVotado</h3>
+                        <small>Votos Emitidos</small>
+                    </div>
                 </div>
             </div>
-
-            @* BUSCADOR *@
-            <div class="card shadow-sm mb-4">
-                <div class="card-body">
-                    <input type="text" id="filtroCedula" class="form-control" placeholder="Buscar votante por cédula..." onkeyup="ejecutarFiltro()">
-                </div>
-            </div>
-
-            <div class="table-responsive bg-white shadow-sm rounded">
-                <table class="table table-hover mb-0 align-middle">
-                    <thead class="table-dark">
-                        <tr>
-                            <th class="ps-4">Cédula</th>
-                            <th>Nombre</th>
-                            <th>Estado</th>
-                            <th class="text-end pe-4">Acción</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var v in Model)
-                        {
-                            string cedula = v.GetProperty("cedula").ToString();
-                            string nombre = v.GetProperty("nombreCompleto").ToString();
-                            bool haVotado = v.GetProperty("haVotado").GetBoolean();
-
-                            <tr class="fila-votante">
-                                <td class="col-cedula ps-4 fw-bold">@cedula</td>
-                                <td>@nombre</td>
-                                <td>
-                                    @if (haVotado) { <span class="badge bg-success">VOTÓ</span> }
-                                    else { <span class="badge bg-warning text-dark">PENDIENTE</span> }
-                                </td>
-                                <td class="text-end pe-4">
-                                    @if (!haVotado)
-                                    {
-                                        <button class="btn btn-primary btn-sm" onclick="generarToken('@cedula', '@nombre')">
-                                            Habilitar
-                                        </button>
-                                    }
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-        }
-    </div>
-
-    <div class="modal fade" id="modalToken" tabindex="-1">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header bg-success text-white">
-                    <h5 class="modal-title">¡Voto Habilitado!</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body text-center py-4">
-                    <h4 id="nombreVotanteModal" class="fw-bold mb-3"></h4>
-                    <div class="display-1 fw-bold text-success my-3" id="tokenDisplay" style="letter-spacing: 5px;"></div>
+            <div class="col-md-4">
+                <div class="card bg-secondary text-white shadow-sm h-100">
+                    <div class="card-body text-center">
+                        <h3>@pendientes</h3>
+                        <small>Pendientes</small>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
 
-    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+        @* Barra de Progreso *@
+        <div class="progress mb-4" style="height: 10px;">
+            <div class="progress-bar progress-bar-striped progress-bar-animated bg-success"
+                 role="progressbar" style="width: @avance.ToString("0")%"></div>
+        </div>
+
+        @* Buscador y Tabla *@
+        <div class="card shadow border-0">
+            <div class="card-header bg-white border-0 py-3">
+                <div class="input-group">
+                    <span class="input-group-text bg-light border-end-0"><i class="bi bi-search"></i></span>
+                    <input type="text" id="buscador" class="form-control border-start-0 bg-light"
+                           placeholder="Buscar por Cédula o Nombre..." onkeyup="filtrarVotantes()">
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0" id="tablaVotantes">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-4">Cédula</th>
+                                <th>Nombre Completo</th>
+                                <th class="text-center">Estado</th>
+                                <th class="text-end pe-4">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (listaVotantes != null)
+                            {
+                                foreach (var v in listaVotantes)
+                                {
+                                    string cedula = v.GetProperty("cedula").GetString();
+                                    string nombre = v.GetProperty("nombreCompleto").GetString();
+                                    bool voto = v.GetProperty("haVotado").GetBoolean();
+
+                                    <tr class="@(voto ? "table-success bg-opacity-10" : "")">
+                                        <td class="ps-4 fw-bold font-monospace">@cedula</td>
+                                        <td>@nombre</td>
+                                        <td class="text-center">
+                                            @if (voto)
+                                            {
+                                                <span class="badge bg-success"><i class="bi bi-check-lg"></i> VOTÓ</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-secondary">PENDIENTE</span>
+                                            }
+                                        </td>
+                                        <td class="text-end pe-4">
+                                            @if (!voto)
+                                            {
+                                                <button class="btn btn-primary btn-sm shadow-sm"
+                                                        onclick="habilitarVoto('@cedula', '@nombre')">
+                                                    <i class="bi bi-key-fill"></i> Generar Token
+                                                </button>
+                                            }
+                                            else
+                                            {
+                                                <small class="text-muted fst-italic">Completado</small>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+    else if (estado == 1) // ESTADO 1: MESA POR INICIAR
+    {
+        <div class="text-center mt-5">
+            <div class="card shadow-lg border-0 d-inline-block p-5" style="max-width: 600px;">
+                <div class="mb-4">
+                    <i class="bi bi-shop-window text-primary" style="font-size: 5rem;"></i>
+                </div>
+
+                <h2 class="fw-bold mb-3">Mesa Lista para Iniciar</h2>
+                <p class="fs-5 text-muted mb-4">
+                    Usted ha sido asignado como Jefe de esta Junta.<br>
+                    Presione el botón para dar inicio a la jornada electoral.
+                </p>
+
+                <button class="btn btn-primary btn-lg px-5 fw-bold shadow" onclick="iniciarMesa()">
+                    <i class="bi bi-play-circle-fill"></i> APERTURAR MESA
+                </button>
+            </div>
+        </div>
+    }
+    else
+    {
+        @* PANTALLA DE BLOQUEO (CUANDO ESTÁ CERRADA/PENDIENTE/APROBADA) *@
+        <div class="text-center mt-5">
+            <div class="card shadow-lg border-0 d-inline-block p-5" style="max-width: 600px;">
+                <div class="mb-4">
+                    @if (estado == 3)
+                    {
+                        <i class="bi bi-hourglass-split text-warning" style="font-size: 5rem;"></i>
+                    }
+                    else if (estado == 4)
+                    {
+                        <i class="bi bi-check-circle-fill text-primary" style="font-size: 5rem;"></i>
+                    }
+                    else
+                    {
+                        <i class="bi bi-lock-fill text-secondary" style="font-size: 5rem;"></i>
+                    }
+                </div>
+
+                <h2 class="fw-bold mb-3">La Mesa está Cerrada</h2>
+
+                @if (estado == 3)
+                {
+                    <p class="fs-5 text-muted">
+                        Has finalizado el proceso de votación. <br>
+                        Los datos han sido enviados y están <strong>pendientes de validación</strong> por el Administrador.
+                    </p>
+                    <div class="alert alert-warning mt-4">
+                        <i class="bi bi-info-circle"></i> Por favor, espere instrucciones del personal administrativo.
+                    </div>
+                }
+                else if (estado == 4)
+                {
+                    <p class="fs-5 text-muted">
+                        Esta mesa ha sido <strong>aprobada y escrutada</strong> oficialmente.
+                    </p>
+                }
+                else
+                {
+                    <p class="fs-5 text-muted">
+                        Estado de la mesa: @estado <br>
+                        Contacte al administrador si cree que esto es un error.
+                    </p>
+                }
+
+                <div class="mt-4">
+                    <a asp-controller="Aut" asp-action="Logout" class="btn btn-dark">
+                        <i class="bi bi-box-arrow-left"></i> Cerrar Sesión
+                    </a>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@* MODAL PARA MOSTRAR EL TOKEN *@
+<div class="modal fade" id="modalToken" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-success text-white border-0">
+                <h5 class="modal-title fw-bold"><i class="bi bi-unlock-fill"></i> Habilitación Exitosa</h5>
+                <button type="button" class="btn-close btn-close-white" onclick="recargarPagina()"></button>
+            </div>
+            <div class="modal-body text-center py-5">
+                <p class="text-muted mb-1">Entregue este código al votante:</p>
+                <h3 class="fw-bold text-dark mb-4" id="nombreVotanteModal"></h3>
+
+                <div class="d-inline-block bg-light border border-2 border-success rounded-3 px-5 py-3 mb-3">
+                    <span class="display-3 fw-bold text-success" id="tokenDisplay" style="letter-spacing: 5px; font-family: monospace;"></span>
+                </div>
+
+                <p class="small text-danger mt-3">
+                    <i class="bi bi-exclamation-triangle"></i> Este token es de un solo uso.
+                </p>
+            </div>
+            <div class="modal-footer justify-content-center border-0 pb-4">
+                <button type="button" class="btn btn-success px-5 fw-bold" onclick="recargarPagina()">
+                    Listo, Votante Ingresando
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
     <script>
-        function ejecutarFiltro() {
-            let texto = document.getElementById("filtroCedula").value;
-            let filas = document.getElementsByClassName("fila-votante");
-            for (let tr of filas) {
-                let cedula = tr.getElementsByClassName("col-cedula")[0].innerText;
-                tr.style.display = cedula.includes(texto) ? "" : "none";
+        // 1. FILTRO DE BÚSQUEDA
+        function filtrarVotantes() {
+            var input = document.getElementById("buscador");
+            var filter = input.value.toUpperCase();
+            var table = document.getElementById("tablaVotantes");
+            var tr = table.getElementsByTagName("tr");
+
+            for (var i = 1; i < tr.length; i++) { // Empezar en 1 para saltar el encabezado
+                var tdCedula = tr[i].getElementsByTagName("td")[0];
+                var tdNombre = tr[i].getElementsByTagName("td")[1];
+                if (tdCedula || tdNombre) {
+                    var txtCedula = tdCedula.textContent || tdCedula.innerText;
+                    var txtNombre = tdNombre.textContent || tdNombre.innerText;
+                    if (txtCedula.toUpperCase().indexOf(filter) > -1 || txtNombre.toUpperCase().indexOf(filter) > -1) {
+                        tr[i].style.display = "";
+                    } else {
+                        tr[i].style.display = "none";
+                    }
+                }
             }
         }
 
-        function generarToken(cedula, nombre) {
-            // ... (Tu función generarToken existente) ...
-             if(!confirm("¿Habilitar a " + nombre + "?")) return;
-            fetch('/Junta/GenerarToken', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: 'cedula=' + cedula
+        // 2. GENERAR TOKEN
+        function habilitarVoto(cedula, nombre) {
+            if(!confirm("¿Está seguro de generar el token para " + nombre + "?")) return;
+
+            const formData = new URLSearchParams();
+            formData.append('cedula', cedula);
+
+            fetch("/Junta/GenerarToken", {
+                method: "POST",
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: formData
             })
-            .then(r => r.json())
-            .then(d => {
-                if(d.success) {
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error("Error en la respuesta del servidor");
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
                     document.getElementById("nombreVotanteModal").innerText = nombre;
-                    document.getElementById("tokenDisplay").innerText = d.token;
-                    new bootstrap.Modal(document.getElementById('modalToken')).show();
-                } else alert(d.message);
+                    document.getElementById("tokenDisplay").innerText = data.token;
+
+                    var modalEl = document.getElementById('modalToken');
+                    var modal = new bootstrap.Modal(modalEl);
+                    modal.show();
+                } else {
+                    alert("No se pudo generar: " + data.message);
+                }
+            })
+            .catch(error => {
+                console.error("Error:", error);
+                alert("Error de conexión. Revise que la API esté encendida.");
             });
         }
 
-        function cerrarMesa() {
-            if(!confirm("¿Está seguro de CERRAR LA MESA?\n\n- Ya no podrá habilitar más votos.\n- La mesa pasará a estado PENDIENTE.")) return;
+        // 3. CERRAR MESA
+        function confirmarCierre() {
+            if (!confirm("⚠️ ATENCIÓN: Al cerrar la mesa NO podrá generar más tokens.\n\n¿Confirma que ha terminado la jornada de votación?")) return;
 
-            fetch('/Junta/CerrarMesa', { method: 'POST' })
-            .then(r => r.json())
-            .then(d => {
-                alert(d.message);
-                location.reload(); // Recargar para ver la pantalla de bloqueo
+            fetch("/Junta/CerrarMesa", {
+                method: "POST"
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert(data.message);
+                }
+            })
+            .catch(error => {
+                console.error("Error:", error);
+                alert("Error al intentar cerrar la mesa.");
             });
+        }
+
+        // 4. INICIAR MESA (APERTURA)
+        function iniciarMesa() {
+            if (!confirm("¿Está listo para iniciar la votación en esta mesa?")) return;
+
+            fetch("/Junta/IniciarMesa", {
+                method: "POST"
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert(data.message);
+                }
+            })
+            .catch(error => {
+                console.error("Error:", error);
+                alert("Error al intentar abrir la mesa.");
+            });
+        }
+
+        function recargarPagina() {
+            location.reload();
         }
     </script>
-</body>
-</html>
+}

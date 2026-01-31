@@ -6,7 +6,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SistemaVotoAPI.Data;
 using SistemaVotoModelos;
-
 using SistemaVotoModelos.DTOs;
 
 namespace SistemaVotoAPI.Controllers
@@ -51,14 +50,43 @@ namespace SistemaVotoAPI.Controllers
             return Ok(juntas);
         }
 
+        // =========================================================================
+        // ⭐ NUEVA FUNCIÓN AÑADIDA: OBTENER JUNTA INDIVIDUAL (NECESARIA PARA EL JEFE)
+        // =========================================================================
+        // GET: api/Juntas/5
+        [HttpGet("{id}")]
+        public async Task<ActionResult<JuntaDetalleDto>> GetJunta(long id)
+        {
+            var junta = await _context.Juntas
+                .Include(j => j.Direccion)
+                .Include(j => j.JefeDeJunta)
+                .Where(j => j.Id == id)
+                .Select(j => new JuntaDetalleDto
+                {
+                    Id = j.Id,
+                    NumeroMesa = j.NumeroMesa,
+                    Ubicacion = j.Direccion != null
+                        ? $"{j.Direccion.Provincia} - {j.Direccion.Canton} - {j.Direccion.Parroquia}"
+                        : "Sin dirección",
+                    NombreJefe = string.IsNullOrEmpty(j.JefeDeJuntaId)
+                        ? "Sin asignar"
+                        : (j.JefeDeJunta != null ? j.JefeDeJunta.NombreCompleto : "Usuario no encontrado"),
+                    EstadoJunta = j.Estado
+                })
+                .FirstOrDefaultAsync();
+
+            if (junta == null)
+            {
+                return NotFound();
+            }
+
+            return Ok(junta);
+        }
+
         // GET: api/Juntas/PorEleccion/{id}
         [HttpGet("PorEleccion/{eleccionId}")]
         public async Task<ActionResult<IEnumerable<JuntaDetalleDto>>> GetJuntasPorEleccion(int eleccionId)
         {
-            // Si en el futuro deseas filtrar por EleccionId, descomenta la versión filtrada.
-            // Por ahora mantenemos la misma respuesta que GetJuntas para compatibilidad.
-            // return await GetJuntas();
-
             var juntas = await _context.Juntas
                 .Where(j => j.EleccionId == eleccionId)
                 .Include(j => j.Direccion)
@@ -88,7 +116,6 @@ namespace SistemaVotoAPI.Controllers
         public async Task<IActionResult> CrearPorDireccion(
           [FromQuery] int direccionId,
           [FromQuery] int cantidad)
-
         {
             var direccion = await _context.Direcciones.FindAsync(direccionId);
 
@@ -106,9 +133,8 @@ namespace SistemaVotoAPI.Controllers
                 return BadRequest("No existe una elección activa.");
 
             int juntasExistentes = await _context.Juntas
-    .CountAsync(j => j.DireccionId == direccionId
-                  && j.EleccionId == eleccionActiva.Id);
-
+                .CountAsync(j => j.DireccionId == direccionId
+                              && j.EleccionId == eleccionActiva.Id);
 
             var nuevasJuntas = new List<Junta>();
 
@@ -118,13 +144,10 @@ namespace SistemaVotoAPI.Controllers
 
                 nuevasJuntas.Add(new Junta
                 {
-                    // Id es identity (bigint) en la BD; no lo seteamos aquí
                     NumeroMesa = numeroMesa,
                     DireccionId = direccionId,
                     Estado = 1,
                     JefeDeJuntaId = null,
-
-                    // ⭐ Asignamos la elección activa (EleccionId es int en tu esquema)
                     EleccionId = eleccionActiva.Id
                 });
             }
@@ -136,7 +159,6 @@ namespace SistemaVotoAPI.Controllers
         }
 
         // PUT: api/Juntas/AsignarJefe
-        // Vincula un votante a la mesa, le otorga el Rol 3 y abre la mesa (Estado 2)
         [HttpPut("AsignarJefe")]
         public async Task<IActionResult> AsignarJefe(long juntaId, string cedulaVotante)
         {
@@ -190,7 +212,7 @@ namespace SistemaVotoAPI.Controllers
 
         // PUT: api/Juntas/CerrarMesa/{id}
         // Acción realizada por el Jefe de Junta al finalizar la jornada
-        [AllowAnonymous] // El control de acceso se valida mediante el Claim de JuntaId en el MVC
+        [AllowAnonymous]
         [HttpPut("CerrarMesa/{id}")]
         public async Task<IActionResult> CerrarMesa(long id)
         {
@@ -220,6 +242,48 @@ namespace SistemaVotoAPI.Controllers
             await _context.SaveChangesAsync();
 
             return Ok(new { mensaje = "Junta aprobada. Los votos se han integrado al conteo oficial." });
+        }
+        // =========================================================================
+        // ⭐ NUEVO ENDPOINT: OBTENER JEFES DISPONIBLES (FILTRO REAL)
+        // =========================================================================
+        // GET: api/Juntas/PosiblesJefes
+        [HttpGet("PosiblesJefes")]
+        public async Task<ActionResult<IEnumerable<Votante>>> GetPosiblesJefes()
+        {
+            // Lógica:
+            // 1. Buscamos usuarios con Rol 3 (Jefes de Junta).
+            // 2. Filtramos para excluir a aquellos cuya Cédula YA ESTÁ registrada 
+            //    en la columna 'JefeDeJuntaId' de la tabla 'Juntas'.
+
+            var jefesDisponibles = await _context.Votantes
+                .Where(v => v.RolId == 3 && !_context.Juntas.Any(j => j.JefeDeJuntaId == v.Cedula))
+                .OrderBy(v => v.NombreCompleto)
+                .ToListAsync();
+
+            return Ok(jefesDisponibles);
+        
+        }
+        // =========================================================
+        // ⭐ NUEVO: INICIAR JORNADA (Forzar estado 1 -> 2)
+        // =========================================================
+        [HttpPut("IniciarJornada/{id}")]
+        public async Task<IActionResult> IniciarJornada(long id)
+        {
+            var junta = await _context.Juntas.FindAsync(id);
+            if (junta == null) return NotFound("Junta no encontrada");
+
+            // Si ya está abierta, devolvemos éxito
+            if (junta.Estado == 2) return Ok("La mesa ya estaba abierta.");
+
+            // Solo permitimos pasar de CREADA (1) a ABIERTA (2)
+            if (junta.Estado == 1)
+            {
+                junta.Estado = 2;
+                await _context.SaveChangesAsync();
+                return Ok(new { mensaje = "Jornada iniciada correctamente." });
+            }
+
+            return BadRequest($"No se puede iniciar. Estado actual: {junta.Estado}");
         }
     }
 }

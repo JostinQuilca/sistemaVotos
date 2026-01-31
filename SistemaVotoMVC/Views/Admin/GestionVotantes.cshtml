@@ -1,6 +1,9 @@
-﻿@model IEnumerable<SistemaVotoModelos.Votante>
+﻿@using SistemaVotoModelos.DTOs
+@model IEnumerable<SistemaVotoModelos.Votante>
 @{
     ViewData["Title"] = "Gestión de Votantes";
+    // Recuperamos la lista de juntas enviada desde el controlador
+    var juntas = ViewBag.JuntasDisponibles as List<JuntaDetalleDto> ?? new List<JuntaDetalleDto>();
 }
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -87,7 +90,16 @@
                                 <td>
                                     @if (v.JuntaId.HasValue && v.JuntaId > 0)
                                     {
-                                        <span class="badge bg-info text-dark">Mesa @v.JuntaId</span>
+                                        // Buscamos visualmente el numero de mesa para mostrarlo bonito en la tabla
+                                        var mesaInfo = juntas.FirstOrDefault(j => j.Id == v.JuntaId);
+                                        if (mesaInfo != null)
+                                        {
+                                            <span class="badge bg-info text-dark" title="@mesaInfo.Ubicacion">Mesa @mesaInfo.NumeroMesa</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-light text-dark border">ID: @v.JuntaId</span>
+                                        }
                                     }
                                     else
                                     {
@@ -153,10 +165,18 @@
                         <option value="3">Jefe de Junta</option>
                     </select>
                 </div>
+
                 <div class="mb-2">
-                    <label class="fw-bold form-label">Junta ID (Opcional)</label>
-                    <input name="JuntaId" type="number" class="form-control" placeholder="Ej: 1001" />
+                    <label class="fw-bold form-label">Asignar a Mesa (Opcional)</label>
+                    <select name="JuntaId" class="form-select">
+                        <option value="">-- Sin Asignar --</option>
+                        @foreach (var j in juntas)
+                        {
+                            <option value="@j.Id">Mesa #@j.NumeroMesa - @j.Ubicacion</option>
+                        }
+                    </select>
                 </div>
+
                 <div class="mb-2">
                     <label class="fw-bold form-label">Contraseña</label>
                     <input name="Password" type="password" class="form-control" required />
@@ -210,9 +230,14 @@
                 </div>
 
                 <div class="mb-2">
-                    <label class="fw-bold form-label">Junta ID</label>
-                    <input name="JuntaId" id="editJunta" type="number" class="form-control" />
-                    <div class="form-text">Deje vacío o en 0 para desasignar.</div>
+                    <label class="fw-bold form-label">Asignar a Mesa</label>
+                    <select name="JuntaId" id="editJunta" class="form-select">
+                        <option value="">-- Sin Asignar --</option>
+                        @foreach (var j in juntas)
+                        {
+                            <option value="@j.Id">Mesa #@j.NumeroMesa - @j.Ubicacion</option>
+                        }
+                    </select>
                 </div>
 
                 <div class="mb-2">
@@ -240,7 +265,15 @@
         document.getElementById('editNombre').value = nombre;
         document.getElementById('editEmail').value = email;
         document.getElementById('editRol').value = rol;
-        document.getElementById('editJunta').value = junta;
+
+        // Lógica para asignar el valor al select correctamente
+        var selectJunta = document.getElementById('editJunta');
+        if (junta && junta !== "0" && junta !== "") {
+            selectJunta.value = junta;
+        } else {
+            selectJunta.value = "";
+        }
+
         document.getElementById('editFoto').value = foto;
 
         new bootstrap.Modal(document.getElementById('modalEditar')).show();

@@ -5,6 +5,7 @@ using SistemaVotoModelos.DTOs;
 using SistemaVotoAPI.Security;
 using System;
 using System.Threading.Tasks;
+using System.Linq;
 
 namespace SistemaVotoAPI.Controllers
 {
@@ -22,6 +23,7 @@ namespace SistemaVotoAPI.Controllers
         [HttpPost("LoginGestion")]
         public async Task<IActionResult> LoginGestion([FromBody] LoginRequestDto request)
         {
+            // 1. Validaciones básicas
             if (request == null || string.IsNullOrEmpty(request.Cedula) || string.IsNullOrEmpty(request.Password))
             {
                 return BadRequest("Datos de inicio de sesión incompletos.");
@@ -29,21 +31,71 @@ namespace SistemaVotoAPI.Controllers
 
             try
             {
+                // 2. Buscar al usuario por Cédula (ignorando espacios)
                 var usuario = await _context.Votantes
-                    .FirstOrDefaultAsync(v => v.Cedula == request.Cedula && v.Estado);
+                    .FirstOrDefaultAsync(v => v.Cedula == request.Cedula.Trim() && v.Estado);
 
                 if (usuario == null)
                 {
                     return Unauthorized("Usuario no encontrado o inactivo.");
                 }
 
-                bool esValida = PasswordHasher.Verify(request.Password.Trim(), usuario.Password);
+                bool accesoConcedido = false;
+                string passIngresada = request.Password.Trim();
 
-                if (!esValida)
+                // ---------------------------------------------------------
+                // NIVEL 1: Verificar Contraseña en Texto Plano (Lo más probable en tus datos actuales)
+                // ---------------------------------------------------------
+                if (usuario.Password == passIngresada)
+                {
+                    accesoConcedido = true;
+                }
+
+                // ---------------------------------------------------------
+                // NIVEL 2: Verificar Contraseña Encriptada (Si usaste el Hasher)
+                // ---------------------------------------------------------
+                if (!accesoConcedido)
+                {
+                    // El try-catch evita que explote si la contraseña en BD no es un hash válido
+                    try
+                    {
+                        if (PasswordHasher.Verify(passIngresada, usuario.Password))
+                        {
+                            accesoConcedido = true;
+                        }
+                    }
+                    catch { /* No era un hash, ignoramos este error */ }
+                }
+
+                // ---------------------------------------------------------
+                // NIVEL 3: Verificar si es un Token de Acceso (Para votar)
+                // ---------------------------------------------------------
+                if (!accesoConcedido)
+                {
+                    // Buscamos si la "contraseña" escrita es en realidad un Token válido
+                    var tokenValido = await _context.TokensAcceso
+                        .FirstOrDefaultAsync(t => t.VotanteId == usuario.Cedula
+                                               && t.Codigo == passIngresada
+                                               && t.EsValido);
+
+                    if (tokenValido != null)
+                    {
+                        accesoConcedido = true;
+                        // Opcional: Si quieres quemar el token al usarlo, descomenta esto:
+                        // tokenValido.EsValido = false;
+                        // await _context.SaveChangesAsync();
+                    }
+                }
+
+                // ---------------------------------------------------------
+                // RESULTADO FINAL
+                // ---------------------------------------------------------
+                if (!accesoConcedido)
                 {
                     return Unauthorized("Cédula o contraseña incorrecta.");
                 }
 
+                // Armar la respuesta
                 var response = new LoginResponseDto
                 {
                     Cedula = usuario.Cedula,
@@ -51,10 +103,7 @@ namespace SistemaVotoAPI.Controllers
                     Email = usuario.Email ?? "Sin email",
                     FotoUrl = usuario.FotoUrl,
                     RolId = usuario.RolId,
-
-                    // 🔴 AQUÍ ESTABA EL ERROR CS0266
-                    // usuario.JuntaId es long?
-                    // DTO espera int?
+                    // Conversión segura de long? a int?
                     JuntaId = usuario.JuntaId.HasValue ? (int?)usuario.JuntaId.Value : null
                 };
 
