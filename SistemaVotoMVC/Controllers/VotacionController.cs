@@ -161,7 +161,7 @@ namespace SistemaVotoMVC.Controllers
         }
 
         // -------------------------------------------------------------------
-        // ACCIÓN: EMITIR VOTO (CON ENVÍO DE CORREO)
+        // ACCIÓN: EMITIR VOTO (CON ENVÍO DE CORREO DIAGNÓSTICO)
         // -------------------------------------------------------------------
         [HttpPost]
         [ValidateAntiForgeryToken]
@@ -202,19 +202,25 @@ namespace SistemaVotoMVC.Controllers
 
             if (responseMarca.IsSuccessStatusCode)
             {
-                // --- 3. ENVÍO DE CORREO (SEGUNDO PLANO) ---
+                // --- 3. ENVÍO DE CORREO (MODO DIAGNÓSTICO) ---
                 var respDatos = await client.GetAsync($"{_endpointVotantes}/{miCedula}");
                 if (respDatos.IsSuccessStatusCode)
                 {
                     var datosVotante = await respDatos.Content.ReadFromJsonAsync<Votante>();
 
-                    // AQUÍ ESTÁ LA CORRECCIÓN: Se envían los 4 parámetros (Email, Nombre, Cédula, JuntaId)
-                    _ = Task.Run(() => CorreoHelper.EnviarCertificado(
+                    // ⚠️ Usamos 'await' para esperar la respuesta del correo y ver si falla
+                    var resultadoEmail = await CorreoHelper.EnviarCertificado(
                             datosVotante.Email,
                             datosVotante.NombreCompleto,
                             datosVotante.Cedula,
                             datosVotante.JuntaId
-                        ));
+                        );
+
+                    // Si falló el correo, mostramos el error técnico en pantalla
+                    if (!resultadoEmail.exitoso)
+                    {
+                        TempData["Error"] = $"Voto guardado, pero FALLÓ el correo: {resultadoEmail.mensaje}";
+                    }
                 }
                 // ------------------------------------------
 

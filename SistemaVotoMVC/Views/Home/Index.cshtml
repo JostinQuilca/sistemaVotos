@@ -2,20 +2,29 @@
     ViewData["Title"] = "Inicio";
 }
 
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+
 <div class="container vh-100 d-flex justify-content-center align-items-center">
-    <div class="text-center">
-        <h1 class="mb-4">Sistema de Voto Electrónico</h1>
+    <div class="text-center shadow-lg p-5 bg-white rounded-4" style="max-width: 500px; border-top: 5px solid #0d6efd;">
+        <div class="mb-4">
+            <i class="bi bi-box-seam text-primary" style="font-size: 4rem;"></i>
+        </div>
 
-        <div class="d-grid gap-3 col-6 mx-auto">
-            <!-- Botón Acceder -->
-            <a asp-controller="Aut" asp-action="Login" class="btn btn-primary btn-lg">
-                Acceder
+        <h1 class="fw-bold mb-2">Sistema Electoral</h1>
+        <p class="text-muted mb-4">Bienvenido a la plataforma de votación digital</p>
+
+        <div class="d-grid gap-3 mx-auto">
+            <a asp-controller="Aut" asp-action="Login" class="btn btn-primary btn-lg py-3 fw-bold shadow-sm">
+                <i class="bi bi-person-check me-2"></i> Acceder a Votar
             </a>
 
-            <!-- Botón Resultados -->
-            <a asp-controller="Resultados" asp-action="Index" class="btn btn-secondary btn-lg">
-                Revisar resultados de elecciones
+            <a asp-controller="Resultados" asp-action="Index" class="btn btn-outline-dark btn-lg py-3 fw-bold">
+                <i class="bi bi-bar-chart-line me-2"></i> Ver Resultados en Vivo
             </a>
+        </div>
+
+        <div class="mt-4">
+            <small class="text-muted fst-italic">CNE - República del Ecuador</small>
         </div>
     </div>
 </div>
