@@ -102,51 +102,62 @@ namespace SistemaVotoAPI.Controllers
         }
 
         // PUT: api/Votantes/cedula (EDITAR)
+        // PUT: api/Votantes/cedula (EDITAR SEGURO)
         [HttpPut("{cedula}")]
         public async Task<IActionResult> PutVotante(string cedula, Votante votante)
         {
-            if (cedula != votante.Cedula)
-                return BadRequest("La cédula no coincide.");
+            if (cedula != votante.Cedula) return BadRequest("Cédula no coincide.");
 
-            // 1. Buscamos el usuario original en la BD (sin rastrear)
-            var existente = await _context.Votantes.AsNoTracking()
-                .FirstOrDefaultAsync(v => v.Cedula == cedula);
+            // 1. Buscamos el usuario ORIGINAL en la Base de Datos (sin tracking para comparar)
+            var existente = await _context.Votantes.AsNoTracking().FirstOrDefaultAsync(v => v.Cedula == cedula);
 
-            if (existente == null)
-                return NotFound();
+            if (existente == null) return NotFound("Usuario no existe.");
 
-            // Validación: Candidato no puede ser Admin/Jefe
+            // Validaciones de Roles (Mantenemos tu lógica)
             if (votante.RolId != existente.RolId && (votante.RolId == 1 || votante.RolId == 3))
             {
-                bool esCandidato = await _context.Candidatos.AnyAsync(c => c.Cedula == cedula);
-                if (esCandidato)
+                if (await _context.Candidatos.AnyAsync(c => c.Cedula == cedula))
                     return Conflict("Un candidato no puede ser administrador ni jefe de junta.");
             }
 
             _context.Entry(votante).State = EntityState.Modified;
 
-            // --- PROTECCIÓN CONTRA EL BUG DE BLOQUEO ---
-            // Aseguramos que el estado sea TRUE al editar (o mantenemos el existente)
-            votante.Estado = true;
-            votante.HaVotado = existente.HaVotado;
+            // --- PROTECCIÓN CRÍTICA CONTRA DOBLE ENCRIPTACIÓN ---
 
-            // Manejo correcto de JuntaId
+            // Caso A: Si la contraseña viene vacía, recuperamos la vieja.
+            if (string.IsNullOrWhiteSpace(votante.Password))
+            {
+                votante.Password = existente.Password;
+            }
+            // Caso B: Si la contraseña que envían ES IDÉNTICA a la que ya existe (el Hash),
+            // SIGNIFICA QUE NO LA CAMBIARON. ¡No la volvemos a encriptar!
+            else if (votante.Password == existente.Password)
+            {
+                // Dejamos la contraseña tal cual, sin tocarla.
+                votante.Password = existente.Password;
+            }
+            // Caso C: Es diferente y tiene texto. Es una NUEVA contraseña real (ej: "hola123").
+            else
+            {
+                votante.Password = PasswordHasher.Hash(votante.Password.Trim());
+            }
+            // ----------------------------------------------------
+
+            // Aseguramos mantener datos críticos si vienen nulos
+            votante.Estado = true; // Siempre activo al editar para evitar bloqueos
+
+            // Mantenemos el estado del voto real si no se especificó
+            // (Esto evita que se resetee el voto accidentalmente)
+            if (!votante.HaVotado && existente.HaVotado)
+            {
+                votante.HaVotado = true;
+            }
+
+            // Manejo de Junta
             if (votante.JuntaId.HasValue && votante.JuntaId > 0)
                 votante.JuntaId = votante.JuntaId;
             else
                 votante.JuntaId = null;
-
-            // LÓGICA DE CONTRASEÑA SEGURA
-            if (string.IsNullOrWhiteSpace(votante.Password))
-            {
-                // Si viene vacía, MANTENEMOS la que ya tenía
-                votante.Password = existente.Password;
-            }
-            else
-            {
-                // Si viene nueva, la HASHEAMOS con el nuevo algoritmo
-                votante.Password = PasswordHasher.Hash(votante.Password.Trim());
-            }
 
             try
             {
@@ -154,10 +165,8 @@ namespace SistemaVotoAPI.Controllers
             }
             catch (DbUpdateConcurrencyException)
             {
-                if (!await _context.Votantes.AnyAsync(e => e.Cedula == cedula))
-                    return NotFound();
-                else
-                    throw;
+                if (!await _context.Votantes.AnyAsync(e => e.Cedula == cedula)) return NotFound();
+                else throw;
             }
 
             return NoContent();

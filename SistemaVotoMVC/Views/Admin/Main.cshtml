@@ -1,90 +1,135 @@
 ﻿@{
     ViewData["Title"] = "Panel de Administración";
+    bool yaVoto = ViewBag.AdminYaVoto != null && (bool)ViewBag.AdminYaVoto;
 }
 
-<div class="container mt-5">
+<div class="container py-5">
 
-    <!-- Encabezado -->
-    <div class="row mb-4">
-        <div class="col text-center">
-            <h2 class="fw-bold">🛡️ Panel de Administración</h2>
-            <p class="text-muted">
-                Bienvenido, <strong>@ViewBag.NombreAdmin</strong>
+    <div class="d-flex justify-content-between align-items-center mb-5 border-bottom pb-4">
+
+        <div>
+            <h2 class="fw-bold text-dark display-6 mb-0">Panel de Administración</h2>
+            <p class="text-muted fs-5 mb-0 mt-1">
+                Bienvenido, <span class="text-primary fw-bold">@ViewBag.NombreAdmin</span>
             </p>
         </div>
+
+        <div>
+            @if (!yaVoto)
+            {
+                <a asp-controller="Votacion" asp-action="Index"
+                   class="btn btn-warning fw-bold shadow-sm rounded-pill px-4 py-2 border border-dark hover-scale">
+                    <i class="bi bi-box-seam-fill me-2"></i> Ejercer Voto
+                </a>
+            }
+            else
+            {
+                <span class="badge bg-success bg-opacity-10 text-success border border-success px-3 py-2 rounded-pill">
+                    <i class="bi bi-check-circle-fill me-1"></i> Ya has votado
+                </span>
+            }
+        </div>
     </div>
 
-    <!-- Tarjetas -->
-    <div class="row g-4 justify-content-center">
+    <div class="row row-cols-1 row-cols-md-3 g-4">
 
-        <!-- Votantes -->
-        <div class="col-md-4">
-            <div class="card shadow-lg border-0 h-100 text-center">
-                <div class="card-body py-4">
+        <div class="col">
+            <div class="card h-100 border-0 shadow-sm hover-card">
+                <div class="card-body text-center d-flex flex-column p-4">
                     <div class="mb-3">
-                        <i class="bi bi-people-fill fs-1 text-primary"></i>
+                        <div class="icon-box bg-primary bg-opacity-10 text-primary mx-auto rounded-circle d-flex align-items-center justify-content-center">
+                            <i class="bi bi-people-fill fs-2"></i>
+                        </div>
                     </div>
-                    <h5 class="fw-bold">Gestión de Votantes</h5>
-                    <p class="text-muted small">
-                        Registro, edición y control de ciudadanos del sistema.
+                    <h5 class="card-title fw-bold mb-3">Votantes</h5>
+                    <p class="card-text text-muted small mb-4">
+                        Registro, edición y control de todos los ciudadanos empadronados.
                     </p>
-                    <a asp-controller="Admin"
-                       asp-action="GestionVotantes"
-                       class="btn btn-primary w-100">
-                        Administrar Usuarios
-                    </a>
+                    <div class="mt-auto w-100">
+                        <a asp-controller="Admin" asp-action="GestionVotantes" class="btn btn-outline-primary w-100 fw-bold rounded-pill">
+                            Administrar Usuarios
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- Elecciones -->
-        <div class="col-md-4">
-            <div class="card shadow-lg border-0 h-100 text-center">
-                <div class="card-body py-4">
+        <div class="col">
+            <div class="card h-100 border-0 shadow-sm hover-card">
+                <div class="card-body text-center d-flex flex-column p-4">
                     <div class="mb-3">
-                        <i class="bi bi-check2-square fs-1 text-success"></i>
+                        <div class="icon-box bg-success bg-opacity-10 text-success mx-auto rounded-circle d-flex align-items-center justify-content-center">
+                            <i class="bi bi-check2-square fs-2"></i>
+                        </div>
                     </div>
-                    <h5 class="fw-bold">Gestión de Elecciones</h5>
-                    <p class="text-muted small">
-                        Crear procesos electorales y controlar su estado.
+                    <h5 class="card-title fw-bold mb-3">Elecciones</h5>
+                    <p class="card-text text-muted small mb-4">
+                        Configuración de procesos electorales, candidatos y monitoreo.
                     </p>
-                    <a asp-controller="Admin"
-                       asp-action="GestionElecciones"
-                       class="btn btn-success w-100">
-                        Gestionar Elecciones
-                    </a>
-
+                    <div class="mt-auto w-100">
+                        <a asp-controller="Admin" asp-action="GestionElecciones" class="btn btn-outline-success w-100 fw-bold rounded-pill">
+                            Gestionar Elecciones
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- Juntas -->
-        <div class="col-md-4">
-            <div class="card shadow-lg border-0 h-100 text-center">
-                <div class="card-body py-4">
+        <div class="col">
+            <div class="card h-100 border-0 shadow-sm hover-card">
+                <div class="card-body text-center d-flex flex-column p-4">
                     <div class="mb-3">
-                        <i class="bi bi-diagram-3-fill fs-1 text-warning"></i>
+                        <div class="icon-box bg-warning bg-opacity-10 text-warning mx-auto rounded-circle d-flex align-items-center justify-content-center">
+                            <i class="bi bi-diagram-3-fill fs-2"></i>
+                        </div>
                     </div>
-                    <h5 class="fw-bold">Gestión de Juntas</h5>
-                    <p class="text-muted small">
-                        Asignación de jefes de junta y control de mesas.
+                    <h5 class="card-title fw-bold mb-3">Juntas</h5>
+                    <p class="card-text text-muted small mb-4">
+                        Asignación de Jefes de Junta y control de aperturas.
                     </p>
-                    <a asp-controller="Admin"
-                       asp-action="GestionJuntas"
-                       class="btn btn-warning w-100 text-dark">
-                        Administrar Juntas
-                    </a>
+                    <div class="mt-auto w-100">
+                        <a asp-controller="Admin" asp-action="GestionJuntas" class="btn btn-outline-warning text-dark w-100 fw-bold rounded-pill">
+                            Administrar Juntas
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>
 
     </div>
 
-    <!-- Footer -->
-    <div class="row mt-5">
-        <div class="col text-center text-muted small">
-            Sistema de Votación Electrónica • Panel Administrativo
-        </div>
+    <div class="text-center mt-5 text-muted small opacity-50">
+        &copy; @DateTime.Now.Year - Sistema de Votación Electrónica
     </div>
 
 </div>
+
+<style>
+    .icon-box {
+        width: 70px;
+        height: 70px;
+        transition: transform 0.3s ease;
+    }
+
+    .hover-card {
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+        background: #fff;
+    }
+
+        .hover-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 1rem 3rem rgba(0,0,0,.1) !important;
+        }
+
+            .hover-card:hover .icon-box {
+                transform: scale(1.1);
+            }
+
+    .hover-scale {
+        transition: transform 0.2s;
+    }
+
+        .hover-scale:hover {
+            transform: scale(1.05);
+        }
+</style>

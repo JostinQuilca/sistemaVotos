@@ -6,10 +6,12 @@ using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text; // Necesario para StringContent
 using System.Text.Json;
+using SistemaVotoMVC.Helpers; // Necesario para el helper de correo
 
 namespace SistemaVotoMVC.Controllers
 {
-    [Authorize(Roles = "2")]
+    // Permitimos Votantes (2), Jefes (3) y Administradores (1)
+    [Authorize(Roles = "1, 2, 3")]
     public class VotacionController : Controller
     {
         private readonly IHttpClientFactory _httpClientFactory;
@@ -27,7 +29,9 @@ namespace SistemaVotoMVC.Controllers
             _httpClientFactory = httpClientFactory;
         }
 
-        // PANTALLA 1: Validación de Mesa y Lista de Elecciones
+        // -------------------------------------------------------------------
+        // PANTALLA 1: LISTA DE ELECCIONES (INDEX)
+        // -------------------------------------------------------------------
         public async Task<IActionResult> Index()
         {
             // 1. Obtener Cédula
@@ -39,41 +43,41 @@ namespace SistemaVotoMVC.Controllers
 
             var client = _httpClientFactory.CreateClient("SistemaVotoAPI");
 
-            // 3. OBTENER DATOS DEL VOTANTE (Para saber su Junta)
+            // 3. Obtener datos del Votante
             var responseVotante = await client.GetAsync($"{_endpointVotantes}/{cedula}");
             if (!responseVotante.IsSuccessStatusCode)
             {
-                ViewBag.Mensaje = "No se pudo cargar su información de votante.";
+                ViewBag.Mensaje = "No se pudo cargar su perfil de votante.";
                 return View("MesaNoDisponible");
             }
             var votante = await responseVotante.Content.ReadFromJsonAsync<Votante>();
 
-            // 4. VERIFICAR ASIGNACIÓN DE JUNTA
+            // ---------------------------------------------------------
+            // VALIDACIÓN ESTRICTA DE MESA (PARA TODOS: ADMIN, JEFE Y VOTANTE)
+            // ---------------------------------------------------------
+
+            // A) Verificar Asignación de Mesa
             if (votante.JuntaId == null || votante.JuntaId <= 0)
             {
                 ViewBag.Mensaje = "Usted no se encuentra empadronado en ninguna mesa.";
-                ViewBag.DebugInfo = "JuntaId es nulo o 0 en la base de datos.";
+                ViewBag.DebugInfo = "Su usuario requiere estar asignado a una Junta para votar.";
                 return View("MesaNoDisponible");
             }
 
-            // 5. VERIFICAR ESTADO DE LA JUNTA (CRÍTICO)
+            // B) Verificar Estado de la Mesa
             var responseJunta = await client.GetAsync($"{_endpointJuntas}/{votante.JuntaId}");
             if (responseJunta.IsSuccessStatusCode)
             {
-                // Usamos JsonElement para ser flexibles con el formato de respuesta
                 var juntaJson = await responseJunta.Content.ReadFromJsonAsync<JsonElement>();
 
-                // Intentamos obtener el estado (puede venir como 'estado' o 'estadoJunta' según tu DTO)
                 int estado = 0;
-                if (juntaJson.TryGetProperty("estadoJunta", out var propEstado)) estado = propEstado.GetInt32();
-                else if (juntaJson.TryGetProperty("estado", out var propEstadoOld)) estado = propEstadoOld.GetInt32();
+                if (juntaJson.TryGetProperty("estadoJunta", out var p)) estado = p.GetInt32();
+                else if (juntaJson.TryGetProperty("estado", out var pOld)) estado = pOld.GetInt32();
 
-                // Intentamos obtener ID y Numero para el debug
-                long jId = 0; int jNum = 0;
+                long jId = 0;
                 if (juntaJson.TryGetProperty("id", out var pId)) jId = pId.GetInt64();
-                if (juntaJson.TryGetProperty("numeroMesa", out var pNum)) jNum = pNum.GetInt32();
 
-                // SI EL ESTADO NO ES 2 (ABIERTA), BLOQUEAMOS EL ACCESO
+                // SI NO ES 2 (ABIERTA), BLOQUEAMOS EL ACCESO
                 if (estado != 2)
                 {
                     string motivo = "";
@@ -86,7 +90,7 @@ namespace SistemaVotoMVC.Controllers
                     }
 
                     ViewBag.Mensaje = motivo;
-                    ViewBag.DebugInfo = $"Mesa ID: {jId} | Número: {jNum} | Estado Actual: {estado} (Se requiere 2)";
+                    ViewBag.DebugInfo = $"Mesa ID: {jId} | Estado Actual: {estado} (Se requiere estado 2)";
                     return View("MesaNoDisponible");
                 }
             }
@@ -95,8 +99,9 @@ namespace SistemaVotoMVC.Controllers
                 ViewBag.Mensaje = "Error al conectar con la Mesa Electoral.";
                 return View("MesaNoDisponible");
             }
+            // ---------------------------------------------------------
 
-            // 6. SI TODO ESTÁ BIEN, CARGAMOS LAS ELECCIONES
+            // 4. Cargar Elecciones Activas
             var responseEle = await client.GetAsync(_endpointElecciones);
             var elecciones = responseEle.IsSuccessStatusCode
                 ? await responseEle.Content.ReadFromJsonAsync<List<Eleccion>>()
@@ -106,7 +111,9 @@ namespace SistemaVotoMVC.Controllers
             return View(activas);
         }
 
-        // PANTALLA 2: Papeleta
+        // -------------------------------------------------------------------
+        // PANTALLA 2: PAPELETA DE VOTACIÓN
+        // -------------------------------------------------------------------
         [HttpGet]
         public async Task<IActionResult> Papeleta(int eleccionId)
         {
@@ -114,6 +121,32 @@ namespace SistemaVotoMVC.Controllers
             if (await YaVoto(cedula)) return RedirectToAction("Certificado");
 
             var client = _httpClientFactory.CreateClient("SistemaVotoAPI");
+
+            // --- DATOS DE MESA Y RECINTO ---
+            var respVotante = await client.GetAsync($"{_endpointVotantes}/{cedula}");
+            if (respVotante.IsSuccessStatusCode)
+            {
+                var votante = await respVotante.Content.ReadFromJsonAsync<Votante>();
+
+                // Como ya pasó la validación del Index, sabemos que tiene JuntaId válido
+                if (votante.JuntaId != null && votante.JuntaId > 0)
+                {
+                    var respJunta = await client.GetAsync($"{_endpointJuntas}/{votante.JuntaId}");
+                    if (respJunta.IsSuccessStatusCode)
+                    {
+                        var junta = await respJunta.Content.ReadFromJsonAsync<JsonElement>();
+
+                        ViewBag.NumeroMesa = junta.TryGetProperty("numeroMesa", out var n) ? n.GetInt32() : 0;
+
+                        if (junta.TryGetProperty("ubicacion", out var u))
+                            ViewBag.Recinto = u.GetString();
+                        else if (junta.TryGetProperty("direccion", out var d))
+                            ViewBag.Recinto = $"{d.GetProperty("provincia")} - {d.GetProperty("canton")}";
+                    }
+                }
+            }
+            // -------------------------------
+
             var respEle = await client.GetAsync($"{_endpointElecciones}/{eleccionId}");
             if (!respEle.IsSuccessStatusCode) return RedirectToAction("Index");
 
@@ -127,69 +160,99 @@ namespace SistemaVotoMVC.Controllers
             return View(candidatos);
         }
 
-        // ACCIÓN: Guardar el Voto
+        // -------------------------------------------------------------------
+        // ACCIÓN: EMITIR VOTO (CON ENVÍO DE CORREO)
+        // -------------------------------------------------------------------
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> EmitirVoto(int eleccionId, string cedulaCandidato)
+        public async Task<IActionResult> EmitirVoto(int eleccionId, string cedulaCandidato, string rolPostulante, int listaId)
         {
             var miCedula = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
-            // 1. Verificar ANTES de intentar nada
             if (await YaVoto(miCedula)) return RedirectToAction("Certificado");
 
             var voto = new VotoAnonimo
             {
                 EleccionId = eleccionId,
                 CedulaCandidato = cedulaCandidato,
+                RolPostulante = rolPostulante, // VITAL
+                ListaId = listaId,             // VITAL
                 FechaVoto = DateTime.Now
             };
 
             var client = _httpClientFactory.CreateClient("SistemaVotoAPI");
 
-            // 2. Registrar el Voto Anónimo
+            // 1. Enviar voto a la urna
             var responseVoto = await client.PostAsJsonAsync(_endpointVotos, voto);
 
             if (!responseVoto.IsSuccessStatusCode)
             {
-                TempData["Error"] = "Error al conectar con la urna digital.";
+                // Leer el error real
+                var errorReal = await responseVoto.Content.ReadAsStringAsync();
+                errorReal = errorReal.Trim('"');
+                if (string.IsNullOrEmpty(errorReal)) errorReal = "Error desconocido al procesar su voto.";
+
+                TempData["Error"] = $"No se pudo registrar su voto: {errorReal}";
                 return RedirectToAction("Papeleta", new { eleccionId });
             }
 
-            // 3. CRÍTICO: Marcar que YA VOTÓ
+            // 2. Marcar que ya votó
             var content = new StringContent("", Encoding.UTF8, "application/json");
             var responseMarca = await client.PutAsync($"{_endpointAut}/MarcarVoto/{miCedula}", content);
 
             if (responseMarca.IsSuccessStatusCode)
             {
+                // --- 3. ENVÍO DE CORREO (SEGUNDO PLANO) ---
+                var respDatos = await client.GetAsync($"{_endpointVotantes}/{miCedula}");
+                if (respDatos.IsSuccessStatusCode)
+                {
+                    var datosVotante = await respDatos.Content.ReadFromJsonAsync<Votante>();
+
+                    // AQUÍ ESTÁ LA CORRECCIÓN: Se envían los 4 parámetros (Email, Nombre, Cédula, JuntaId)
+                    _ = Task.Run(() => CorreoHelper.EnviarCertificado(
+                            datosVotante.Email,
+                            datosVotante.NombreCompleto,
+                            datosVotante.Cedula,
+                            datosVotante.JuntaId
+                        ));
+                }
+                // ------------------------------------------
+
                 return RedirectToAction("Certificado");
             }
             else
             {
-                TempData["Error"] = "El voto se recibió, pero hubo un error al actualizar su estado. Contacte al administrador.";
+                TempData["Error"] = "Voto recibido, pero error al actualizar estado.";
                 return RedirectToAction("Index");
             }
         }
 
-        public IActionResult Certificado()
+        // -------------------------------------------------------------------
+        // PANTALLA: CERTIFICADO
+        // -------------------------------------------------------------------
+        public async Task<IActionResult> Certificado()
         {
-            return View();
+            // Recuperamos datos para mostrar en el diploma (Vista PDF)
+            var cedula = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var client = _httpClientFactory.CreateClient("SistemaVotoAPI");
+            var resp = await client.GetAsync($"{_endpointVotantes}/{cedula}");
+
+            if (resp.IsSuccessStatusCode)
+            {
+                var votante = await resp.Content.ReadFromJsonAsync<Votante>();
+                return View(votante); // Pasamos el objeto para pintar el nombre
+            }
+
+            return View(new Votante { NombreCompleto = "Ciudadano", Cedula = cedula });
         }
 
-        // MÉTODO AUXILIAR
         private async Task<bool> YaVoto(string cedula)
         {
             if (string.IsNullOrEmpty(cedula)) return true;
-
             var client = _httpClientFactory.CreateClient("SistemaVotoAPI");
             var response = await client.GetAsync($"{_endpointAut}/VerificarEstado/{cedula}");
-
-            if (response.IsSuccessStatusCode)
-            {
-                var haVotado = await response.Content.ReadFromJsonAsync<bool>();
-                return haVotado;
-            }
-
-            return true; // Fail-Closed
+            if (response.IsSuccessStatusCode) return await response.Content.ReadFromJsonAsync<bool>();
+            return true;
         }
     }
 }

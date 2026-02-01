@@ -1,25 +1,184 @@
-﻿@{
+﻿@model SistemaVotoModelos.Votante
+@{
     ViewData["Title"] = "Certificado de Votación";
+    Layout = "_Layout";
 }
 
-<div class="container d-flex justify-content-center align-items-center" style="min-height: 60vh;">
-    <div class="card shadow-lg border-0 text-center p-5" style="max-width: 500px;">
-        <div class="mb-4">
-            <div class="rounded-circle bg-success d-inline-flex align-items-center justify-content-center" style="width: 100px; height: 100px;">
-                <i class="bi bi-check-lg text-white" style="font-size: 4rem;"></i>
-            </div>
-        </div>
+<div class="container mt-4 mb-5">
 
-        <h2 class="fw-bold text-success mb-3">¡Voto Registrado!</h2>
-        <p class="text-muted fs-5 mb-4">
-            Su participación ha sido registrada correctamente en el sistema electoral. Gracias por ejercer su derecho al voto.
-        </p>
+    <div class="row justify-content-center mb-4 no-print">
+        <div class="col-md-10 text-end">
+            <button onclick="descargarPDF()" class="btn btn-danger shadow-sm">
+                <i class="bi bi-file-earmark-pdf-fill me-2"></i> Descargar PDF
+            </button>
 
-        <div class="d-grid gap-2">
-           
-            <a asp-controller="Aut" asp-action="Logout" class="btn btn-link text-muted">
-                Cerrar Sesión
+            @if (User.IsInRole("3"))
+            {
+                <a asp-controller="Junta" asp-action="Index" class="btn btn-warning shadow-sm ms-2">
+                    <i class="bi bi-speedometer2 me-2"></i> Volver a Mesa
+                </a>
+            }
+            else if (User.IsInRole("1"))
+            {
+                <a asp-controller="Admin" asp-action="Main" class="btn btn-dark shadow-sm ms-2">
+                    <i class="bi bi-shield-lock me-2"></i> Volver Admin
+                </a>
+            }
+
+            <a asp-controller="Aut" asp-action="Logout" class="btn btn-outline-dark ms-2">
+                Salir
             </a>
         </div>
     </div>
+
+    <div class="row justify-content-center">
+        <div class="col-auto">
+
+            <div id="certificado-box" class="certificado-diploma">
+
+                <div class="marco-interno">
+
+                    <div class="watermark">VOTÓ</div>
+
+                    <div class="row align-items-center mb-4">
+                        <div class="col-3 text-center">
+                            <img src="https://hablemosdeculturas.com/wp-content/uploads/2019/02/escudo-del-ecuador.png"
+                                 alt="Escudo del Ecuador" style="height: 110px;">
+                        </div>
+                        <div class="col-6 text-center">
+                            <h5 class="text-uppercase fw-bold text-secondary mb-1" style="letter-spacing: 3px;">República del Ecuador</h5>
+                            <h1 class="fw-bold text-primary text-uppercase display-6" style="font-family: 'Times New Roman', serif;">
+                                Certificado de Votación
+                            </h1>
+                            <p class="mb-0 text-muted fst-italic">Proceso Electoral @DateTime.Now.Year</p>
+                        </div>
+                        <div class="col-3 text-center">
+                            <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/d/d0/QR_code_for_mobile_English_Wikipedia.svg/1200px-QR_code_for_mobile_English_Wikipedia.svg.png"
+                                 style="height: 80px; opacity: 0.6;" alt="QR">
+                        </div>
+                    </div>
+
+                    <hr class="border-primary border-2 opacity-50 my-4">
+
+                    <div class="text-center mt-4">
+                        <p class="fs-5 mb-1">El Consejo Nacional Electoral certifica que el ciudadano(a):</p>
+
+                        <h1 class="fw-bold text-dark text-uppercase my-3"
+                            style="font-family: 'Times New Roman', serif; font-size: 2.5rem; letter-spacing: 1px;">
+                            @Model?.NombreCompleto
+                        </h1>
+
+                        <div class="d-flex justify-content-center gap-5 mt-4">
+                            <div class="text-center">
+                                <small class="text-muted d-block fw-bold text-uppercase">Cédula de Identidad</small>
+                                <span class="fs-4 font-monospace fw-bold">@Model?.Cedula</span>
+                            </div>
+                            <div class="text-center">
+                                <small class="text-muted d-block fw-bold text-uppercase">Fecha de Emisión</small>
+                                <span class="fs-4">@DateTime.Now.ToString("dd/MM/yyyy")</span>
+                            </div>
+                            <div class="text-center">
+                                <small class="text-muted d-block fw-bold text-uppercase">Mesa Electoral</small>
+                                <span class="fs-4">N° @(Model?.JuntaId ?? 0)</span>
+                            </div>
+                        </div>
+
+                        <p class="mt-4 fs-5 fst-italic">
+                            Ha cumplido satisfactoriamente con su deber cívico de sufragar.
+                        </p>
+                    </div>
+
+                    <div class="firma-container mt-5 pt-4">
+                        <div class="row justify-content-center">
+                            <div class="col-6 text-center">
+                                <div style="border-bottom: 2px solid #000; margin-bottom: 10px; width: 80%; margin-left: auto; margin-right: auto;"></div>
+                                <h5 class="fw-bold mb-0">PRESIDENTE DE LA JUNTA</h5>
+                                <small class="text-muted">Firma Autorizada</small>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+<script>
+    function descargarPDF() {
+        const elemento = document.getElementById('certificado-box');
+
+        const opciones = {
+            margin:       0,
+            filename:     'Certificado_Votacion_@Model?.Cedula' + '.pdf',
+            image:        { type: 'jpeg', quality: 0.98 },
+            html2canvas:  { scale: 2, useCORS: true },
+            jsPDF:        { unit: 'in', format: 'letter', orientation: 'landscape' }
+        };
+
+        html2pdf().set(opciones).from(elemento).save();
+    }
+</script>
+
+<style>
+    /* Estilo tipo Diploma */
+    .certificado-diploma {
+        width: 1100px;
+        height: 750px;
+        background-color: #fff;
+        /* IMAGEN DE FONDO EN LA ESQUINA */
+        /* background-image: url('https://i.pinimg.com/1200x/41/a0/19/41a0190b4e8cf5c399286a4f7b4d63d9.jpg'); */
+        background-repeat: no-repeat; /* No repetir */
+        background-position: bottom right; /* Esquina inferior derecha */
+        background-size: 300px; /* Tamaño controlado */
+        /* -------------------------- */
+        padding: 20px;
+        position: relative;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        color: #333;
+        margin: auto;
+    }
+
+    .marco-interno {
+        border: 5px double #0d6efd; /* Marco doble azul */
+        height: 100%;
+        padding: 40px;
+        position: relative;
+        /* Para que el contenido quede por encima de la imagen de fondo */
+        background-color: rgba(255, 255, 255, 0.8);
+    }
+
+    .watermark {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%) rotate(-45deg);
+        font-size: 10rem;
+        color: rgba(13, 110, 253, 0.05);
+        font-weight: 900;
+        z-index: 0;
+        pointer-events: none;
+        user-select: none;
+        font-family: Arial, sans-serif;
+    }
+
+    /* Ocultar botones al imprimir */
+    @@media print {
+        .no-print {
+            display: none !important;
+        }
+
+        body {
+            background: none;
+        }
+
+        .certificado-diploma {
+            box-shadow: none;
+            margin: 0;
+            width: 100%;
+            height: 100%;
+        }
+    }
+</style>

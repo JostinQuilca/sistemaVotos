@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using SistemaVotoModelos;
 using SistemaVotoModelos.DTOs;
 using System.Net.Http.Json;
+using System.Security.Claims; // Necesario para obtener la cédula del Admin
 
 namespace SistemaVotoMVC.Controllers
 {
@@ -16,7 +17,6 @@ namespace SistemaVotoMVC.Controllers
         private readonly string _endpointElecciones = "api/Elecciones";
         private readonly string _endpointListas = "api/Listas";
         private readonly string _endpointCandidatos = "api/Candidatos";
-        // Agregamos estos endpoints que usaba tu versión antigua
         private readonly string _endpointJuntas = "api/Juntas";
         private readonly string _endpointDirecciones = "api/Direcciones";
 
@@ -25,16 +25,37 @@ namespace SistemaVotoMVC.Controllers
             _httpClientFactory = httpClientFactory;
         }
 
-        // PANEL PRINCIPAL
+        // ==========================================
+        // PANEL PRINCIPAL (MODIFICADO PARA VERIFICAR VOTO ADMIN)
+        // ==========================================
         [HttpGet]
-        public IActionResult Main()
+        public async Task<IActionResult> Main()
         {
             ViewBag.NombreAdmin = User.Identity?.Name ?? "Administrador";
+
+            // --- LÓGICA NUEVA: Verificar si el Admin ya votó ---
+            var cedula = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            bool yaVoto = true; // Por defecto true para no mostrar el botón si hay error
+
+            if (!string.IsNullOrEmpty(cedula))
+            {
+                var client = _httpClientFactory.CreateClient("SistemaVotoAPI");
+                var response = await client.GetAsync($"api/Aut/VerificarEstado/{cedula}");
+
+                if (response.IsSuccessStatusCode)
+                {
+                    yaVoto = await response.Content.ReadFromJsonAsync<bool>();
+                }
+            }
+
+            ViewBag.AdminYaVoto = yaVoto;
+            // ---------------------------------------------------
+
             return View();
         }
 
         // ==========================================
-        // GESTIÓN DE VOTANTES (MEJORADO CON COMBOBOX JUNTAS)
+        // GESTIÓN DE VOTANTES
         // ==========================================
         [HttpGet]
         public async Task<IActionResult> GestionVotantes()
@@ -50,13 +71,12 @@ namespace SistemaVotoMVC.Controllers
             if (!responseVotantes.IsSuccessStatusCode)
                 TempData["Error"] = "No se pudo obtener la lista de votantes.";
 
-            // 2. Obtener Juntas (PARA LLENAR EL COMBOBOX EN LA VISTA)
+            // 2. Obtener Juntas
             var responseJuntas = await client.GetAsync(_endpointJuntas);
             var listaJuntas = responseJuntas.IsSuccessStatusCode
                 ? await responseJuntas.Content.ReadFromJsonAsync<List<JuntaDetalleDto>>() ?? new List<JuntaDetalleDto>()
                 : new List<JuntaDetalleDto>();
 
-            // Pasamos las juntas a la vista ordenadas
             ViewBag.JuntasDisponibles = listaJuntas.OrderBy(j => j.NumeroMesa).ToList();
 
             return View(listaVotantes);
@@ -310,7 +330,7 @@ namespace SistemaVotoMVC.Controllers
         }
 
         // ==========================================
-        // RESULTADOS DE LA ELECCIÓN
+        // RESULTADOS DE LA ELECCIÓN (MODIFICADO PARA API EN VIVO)
         // ==========================================
         [HttpGet]
         public async Task<IActionResult> VerResultados(int eleccionId)
@@ -319,34 +339,27 @@ namespace SistemaVotoMVC.Controllers
 
             var client = _httpClientFactory.CreateClient("SistemaVotoAPI");
 
-            var respEleccion = await client.GetAsync($"{_endpointElecciones}/{eleccionId}");
-            if (!respEleccion.IsSuccessStatusCode) return RedirectToAction(nameof(GestionElecciones));
-            var eleccion = await respEleccion.Content.ReadFromJsonAsync<Eleccion>();
-            ViewBag.Eleccion = eleccion;
+            // --- LÓGICA NUEVA: CONSUMIR ENDPOINT EN VIVO ---
+            var response = await client.GetAsync($"api/Resultados/EnVivo/{eleccionId}");
 
-            var respCandidatos = await client.GetAsync($"{_endpointCandidatos}/PorEleccion/{eleccionId}");
-            var candidatos = respCandidatos.IsSuccessStatusCode
-                ? await respCandidatos.Content.ReadFromJsonAsync<List<Candidato>>()
-                : new List<Candidato>();
+            if (response.IsSuccessStatusCode)
+            {
+                // Obtenemos el JSON completo con porcentajes calculados por la API
+                var datos = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+                ViewBag.Resultados = datos;
+            }
+            else
+            {
+                TempData["Error"] = "No se pudieron cargar los resultados en vivo.";
+                return RedirectToAction(nameof(GestionElecciones));
+            }
 
-            var respVotos = await client.GetAsync("api/VotosAnonimos");
-            var todosVotos = respVotos.IsSuccessStatusCode
-                ? await respVotos.Content.ReadFromJsonAsync<List<VotoAnonimo>>() ?? new List<VotoAnonimo>()
-                : new List<VotoAnonimo>();
-
-            var votosDeEstaEleccion = todosVotos.Where(v => v.EleccionId == eleccionId).ToList();
-
-            var conteo = votosDeEstaEleccion
-                .GroupBy(v => v.CedulaCandidato)
-                .ToDictionary(g => g.Key, g => g.Count());
-
-            ViewBag.Candidatos = candidatos;
-            ViewBag.TotalVotos = votosDeEstaEleccion.Count;
-            ViewBag.ConteoVotos = conteo;
-
-            return View();
+            return View(); // Usa la vista que te di anteriormente
         }
 
+        // ==========================================
+        // GESTIÓN DE JUNTAS
+        // ==========================================
         [HttpGet]
         public async Task<IActionResult> GestionJuntas()
         {
@@ -358,8 +371,7 @@ namespace SistemaVotoMVC.Controllers
             // 2. Obtener Direcciones
             var direcciones = await client.GetFromJsonAsync<List<Direccion>>(_endpointDirecciones);
 
-            // 3. OBTENER POSIBLES JEFES (Usando el nuevo endpoint filtrado)
-            // Esto traerá solo los Rol 3 que realmente NO están dirigiendo ninguna mesa.
+            // 3. Obtener Posibles Jefes
             var posiblesJefes = await client.GetFromJsonAsync<List<Votante>>($"{_endpointJuntas}/PosiblesJefes");
 
             ViewBag.Direcciones = direcciones ?? new List<Direccion>();

@@ -1,116 +1,143 @@
 ﻿@{
     ViewData["Title"] = "Resultados Electorales";
-    var eleccion = ViewBag.Eleccion as SistemaVotoModelos.Eleccion;
-    var candidatos = ViewBag.Candidatos as List<SistemaVotoModelos.Candidato>;
+    Layout = "_Layout"; // Layout de Admin
 
-    // Recuperamos los datos reales que nos envió el Controller
-    // Si es null (porque no hay votos), usamos 0
-    var totalVotos = (int)(ViewBag.TotalVotos ?? 0);
-    var conteo = ViewBag.ConteoVotos as Dictionary<string, int>;
+    // 1. RECUPERAR DATOS DEL API (JSON)
+    var datos = (System.Text.Json.JsonElement)ViewBag.Resultados;
+
+    // Extraer valores seguros
+    int eleccionId = 0;
+    int totalVotos = 0;
+    System.Text.Json.JsonElement detalle = default;
+
+    // Validamos que el JSON no esté vacío antes de intentar leer
+    if (datos.ValueKind != System.Text.Json.JsonValueKind.Undefined)
+    {
+        if (datos.TryGetProperty("eleccionId", out var pId)) eleccionId = pId.GetInt32();
+        if (datos.TryGetProperty("totalVotos", out var pTotal)) totalVotos = pTotal.GetInt32();
+        if (datos.TryGetProperty("detalle", out var pDetalle)) detalle = pDetalle;
+    }
 }
 
 <div class="container mt-4">
+
+    @* ENCABEZADO *@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
-            <h2 class="fw-bold mb-0">📊 Resultados: @(eleccion?.Titulo ?? "Cargando...")</h2>
-            <div class="mt-2">
-                <span class="badge @(eleccion?.Estado == "ACTIVA" ? "bg-success" : eleccion?.Estado == "CONFIGURACION" ? "bg-warning text-dark" : "bg-secondary")">
-                    Estado: @(eleccion?.Estado ?? "DESCONOCIDO")
-                </span>
-                <span class="badge bg-light text-dark border ms-2">
-                    Total Votos: <strong>@totalVotos</strong>
-                </span>
-            </div>
+            <h2 class="fw-bold text-primary mb-0">📊 Resultados en Tiempo Real</h2>
+            <p class="text-muted">Escrutinio automatizado de la Urna Digital</p>
         </div>
-        <a asp-action="GestionElecciones" class="btn btn-outline-secondary">
-            <i class="bi bi-arrow-left"></i> Volver
-        </a>
+        <div class="text-end">
+            <h1 class="display-4 fw-bold text-dark mb-0">@totalVotos</h1>
+            <span class="badge bg-dark fs-6">VOTOS TOTALES</span>
+        </div>
     </div>
 
-    @if (eleccion != null && eleccion.Estado == "CONFIGURACION")
+    @* CONTENIDO PRINCIPAL *@
+    @if (totalVotos == 0)
     {
-        <div class="card shadow border-warning mb-3">
-            <div class="card-body text-center py-5">
-                <i class="bi bi-exclamation-triangle text-warning" style="font-size: 4rem;"></i>
-                <h3 class="fw-bold mt-3">Elección en Configuración</h3>
-                <p class="text-muted fs-5">
-                    El sistema de conteo iniciará cuando cambies el estado a <span class="badge bg-success">ACTIVA</span>.
-                </p>
+        <div class="alert alert-warning text-center p-5 shadow-sm border-0">
+            <div class="mb-3">
+                <i class="bi bi-inbox fs-1 text-warning opacity-50" style="font-size: 4rem;"></i>
             </div>
+            <h3 class="mt-3 fw-bold">Aún no hay votos registrados</h3>
+            <p class="text-muted">Los resultados aparecerán aquí apenas inicie la votación.</p>
+
+            <a href="javascript:location.reload()" class="btn btn-outline-dark mt-3 px-4 rounded-pill">
+                <i class="bi bi-arrow-clockwise me-2"></i> Actualizar Ahora
+            </a>
         </div>
     }
     else
     {
-        @if (candidatos == null || !candidatos.Any())
-        {
-            <div class="alert alert-info">No hay candidatos registrados.</div>
-        }
-        else
-        {
-            <div class="row">
-                @foreach (var c in candidatos)
+        <div class="row">
+            @if (detalle.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                foreach (var c in detalle.EnumerateArray())
                 {
-                    // --- LÓGICA REAL ---
-                    // Buscamos cuántos votos tiene este candidato en el diccionario
-                    int votosReales = 0;
-                    if (conteo != null && conteo.ContainsKey(c.Cedula))
-                    {
-                        votosReales = conteo[c.Cedula];
-                    }
-
-                    // Calculamos porcentaje REAL (evitando división por cero)
-                    double porcentaje = totalVotos > 0 ? (double)votosReales / totalVotos * 100 : 0;
-                    // -------------------
+                    // Extraer datos de cada candidato del JSON
+                    string nombre = c.GetProperty("nombre").GetString() ?? "Desconocido";
+                    string lista = c.GetProperty("lista").GetString() ?? "-";
+                    string listaLogo = c.TryGetProperty("listaLogo", out var lLogo) ? lLogo.GetString() : "";
+                    string foto = c.TryGetProperty("fotoUrl", out var fUrl) ? fUrl.GetString() : "";
+                    int votos = c.GetProperty("votos").GetInt32();
+                    double porc = c.GetProperty("porcentaje").GetDouble();
 
                     <div class="col-md-6 mb-4">
-                        <div class="card shadow-sm border-0 h-100">
+                        <div class="card shadow-sm border-0 h-100 hover-card">
                             <div class="card-body">
                                 <div class="d-flex align-items-center mb-3">
-                                    <div class="me-3">
-                                        @if (!string.IsNullOrEmpty(c.Votante?.FotoUrl))
+
+                                    @* FOTO CANDIDATO *@
+                                    <div class="me-3 position-relative">
+                                        @if (!string.IsNullOrEmpty(foto))
                                         {
-                                            <img src="@c.Votante.FotoUrl" class="rounded-circle border"
-                                                 style="width: 60px; height: 60px; object-fit: cover;">
+                                            <img src="@foto" class="rounded-circle border border-2 border-light shadow-sm"
+                                                 style="width: 70px; height: 70px; object-fit: cover;">
                                         }
                                         else
                                         {
-                                            <div class="bg-secondary rounded-circle text-white d-flex align-items-center justify-content-center"
-                                                 style="width:60px; height:60px;">
-                                                <i class="bi bi-person fs-3"></i>
+                                            <div class="bg-light rounded-circle text-secondary d-flex align-items-center justify-content-center border"
+                                                 style="width: 70px; height: 70px;">
+                                                <i class="bi bi-person-fill fs-2"></i>
                                             </div>
+                                        }
+
+                                        @* LOGO LISTA (Pequeño) *@
+                                        @if (!string.IsNullOrEmpty(listaLogo))
+                                        {
+                                            <img src="@listaLogo" class="position-absolute bottom-0 end-0 bg-white rounded-circle border p-1 shadow-sm"
+                                                 style="width: 30px; height: 30px; object-fit: contain;">
                                         }
                                     </div>
 
-                                    <div class="flex-grow-1">
-                                        <h5 class="fw-bold mb-0">@c.Votante?.NombreCompleto</h5>
-                                        <div class="badge bg-primary mb-1">@c.RolPostulante</div>
-                                        <div class="small text-muted">
-                                            Lista: <strong>@(c.Lista?.NombreLista ?? "Independiente")</strong>
-                                        </div>
+                                    @* TEXTOS *@
+                                    <div class="flex-grow-1 overflow-hidden">
+                                        <h5 class="fw-bold mb-0 text-truncate text-dark">@nombre</h5>
+                                        <small class="text-muted d-block text-truncate">@lista</small>
                                     </div>
 
-                                    @if (!string.IsNullOrEmpty(c.Lista?.LogoUrl))
-                                    {
-                                        <img src="@c.Lista.LogoUrl" style="height: 40px; max-width: 60px; object-fit:contain;">
-                                    }
+                                    @* PORCENTAJE GRANDE *@
+                                    <div class="text-end ps-3">
+                                        <h3 class="fw-bold text-primary mb-0">@porc.ToString("0.0")%</h3>
+                                        <small class="text-muted fw-bold">@votos Votos</small>
+                                    </div>
                                 </div>
 
-                                <hr class="my-2">
-
-                                <div class="d-flex justify-content-between align-items-end mb-1">
-                                    <h3 class="fw-bold mb-0">@votosReales</h3>
-                                    <span class="fs-5 fw-bold text-success">@porcentaje.ToString("0.0")%</span>
-                                </div>
-
-                                <div class="progress" style="height: 10px;">
-                                    <div class="progress-bar bg-success" role="progressbar"
-                                         style="width: @porcentaje.ToString("0")%"></div>
+                                @* BARRA DE PROGRESO *@
+                                <div class="progress" style="height: 12px; border-radius: 10px;">
+                                    <div class="progress-bar progress-bar-striped progress-bar-animated bg-success"
+                                         role="progressbar"
+                                         style="width: @porc.ToString("0")%">
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
                 }
-            </div>
-        }
+            }
+        </div>
     }
+
+    @* BOTONES DE ACCIÓN *@
+    <div class="d-flex justify-content-center mt-5 gap-3">
+        <a href="javascript:location.reload()" class="btn btn-primary px-4 fw-bold shadow-sm">
+            <i class="bi bi-arrow-clockwise me-2"></i> Actualizar Datos
+        </a>
+
+        <a asp-action="GestionElecciones" class="btn btn-outline-secondary px-4 fw-bold">
+            <i class="bi bi-arrow-left me-2"></i> Volver a Lista
+        </a>
+    </div>
 </div>
+
+<style>
+    .hover-card {
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+        .hover-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 .5rem 1rem rgba(0,0,0,.15) !important;
+        }
+</style>

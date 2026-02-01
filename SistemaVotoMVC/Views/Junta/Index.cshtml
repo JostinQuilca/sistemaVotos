@@ -13,7 +13,6 @@
 
     if (datosJunta.HasValue)
     {
-        // 1. Obtener Estado
         if (datosJunta.Value.TryGetProperty("estadoJunta", out var propEstado))
         {
             estado = propEstado.GetInt32();
@@ -23,7 +22,6 @@
             estado = propEstadoOld.GetInt32();
         }
 
-        // 2. Obtener ID y Número de Mesa
         if (datosJunta.Value.TryGetProperty("id", out var propId))
         {
             idJunta = propId.GetInt64();
@@ -34,7 +32,6 @@
             numeroMesa = propMesa.GetInt32();
         }
 
-        // 3. Obtener Ubicación
         if (datosJunta.Value.TryGetProperty("ubicacion", out var propUbi))
         {
             ubicacion = propUbi.GetString() ?? "Sin ubicación";
@@ -80,10 +77,11 @@
                     @* --- SECCIÓN DE VOTO DEL JEFE --- *@
                     @if (!jefeYaVoto)
                     {
-                        <button class="btn btn-warning btn-sm fw-bold me-2 shadow-sm"
-                                onclick="habilitarVoto('@cedulaJefe', '@nombreJefe (TÚ)')">
+                        @* CAMBIO: Enlace directo al módulo de votación *@
+                        <a asp-controller="Votacion" asp-action="Index"
+                           class="btn btn-warning btn-sm fw-bold me-2 shadow-sm">
                             <i class="bi bi-person-raised-hand"></i> Ejercer mi Voto
-                        </button>
+                        </a>
                     }
                     else
                     {
@@ -97,7 +95,7 @@
                         <i class="bi bi-stop-circle-fill"></i> Finalizar Jornada
                     </button>
                 }
-                else if (estado == 1) // ESTADO: CREADA / ASIGNADA (Por iniciar)
+                else if (estado == 1) // ESTADO: CREADA / ASIGNADA
                 {
                     <span class="badge bg-info text-dark fs-6 px-3 py-2">⚪ LISTA PARA INICIAR</span>
                 }
@@ -241,7 +239,7 @@
     }
     else
     {
-        @* PANTALLA DE BLOQUEO (CUANDO ESTÁ CERRADA/PENDIENTE/APROBADA) *@
+        @* PANTALLA DE BLOQUEO *@
         <div class="text-center mt-5">
             <div class="card shadow-lg border-0 d-inline-block p-5" style="max-width: 600px;">
                 <div class="mb-4">
@@ -265,10 +263,10 @@
                 {
                     <p class="fs-5 text-muted">
                         Has finalizado el proceso de votación. <br>
-                        Los datos han sido enviados y están <strong>pendientes de validación</strong> por el Administrador.
+                        Los datos están <strong>pendientes de validación</strong>.
                     </p>
                     <div class="alert alert-warning mt-4">
-                        <i class="bi bi-info-circle"></i> Por favor, espere instrucciones del personal administrativo.
+                        <i class="bi bi-info-circle"></i> Espere instrucciones del personal.
                     </div>
                 }
                 else if (estado == 4)
@@ -279,10 +277,7 @@
                 }
                 else
                 {
-                    <p class="fs-5 text-muted">
-                        Estado de la mesa: @estado <br>
-                        Contacte al administrador si cree que esto es un error.
-                    </p>
+                    <p class="fs-5 text-muted">Estado de la mesa: @estado</p>
                 }
 
                 <div class="mt-4">
@@ -295,7 +290,7 @@
     }
 </div>
 
-@* MODAL PARA MOSTRAR EL TOKEN *@
+@* MODAL TOKEN *@
 <div class="modal fade" id="modalToken" tabindex="-1" data-bs-backdrop="static">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow-lg">
@@ -306,19 +301,13 @@
             <div class="modal-body text-center py-5">
                 <p class="text-muted mb-1">Entregue este código al votante:</p>
                 <h3 class="fw-bold text-dark mb-4" id="nombreVotanteModal"></h3>
-
                 <div class="d-inline-block bg-light border border-2 border-success rounded-3 px-5 py-3 mb-3">
                     <span class="display-3 fw-bold text-success" id="tokenDisplay" style="letter-spacing: 5px; font-family: monospace;"></span>
                 </div>
-
-                <p class="small text-danger mt-3">
-                    <i class="bi bi-exclamation-triangle"></i> Este token es de un solo uso.
-                </p>
+                <p class="small text-danger mt-3"><i class="bi bi-exclamation-triangle"></i> Token de un solo uso.</p>
             </div>
             <div class="modal-footer justify-content-center border-0 pb-4">
-                <button type="button" class="btn btn-success px-5 fw-bold" onclick="recargarPagina()">
-                    Listo, Votante Ingresando
-                </button>
+                <button type="button" class="btn btn-success px-5 fw-bold" onclick="recargarPagina()">Listo, Votante Ingresando</button>
             </div>
         </div>
     </div>
@@ -326,19 +315,16 @@
 
 @section Scripts {
     <script>
-        // 1. FILTRO DE BÚSQUEDA
         function filtrarVotantes() {
             var input = document.getElementById("buscador");
             var filter = input.value.toUpperCase();
-            var table = document.getElementById("tablaVotantes");
-            var tr = table.getElementsByTagName("tr");
-
-            for (var i = 1; i < tr.length; i++) { // Empezar en 1 para saltar el encabezado
+            var tr = document.getElementById("tablaVotantes").getElementsByTagName("tr");
+            for (var i = 1; i < tr.length; i++) {
                 var tdCedula = tr[i].getElementsByTagName("td")[0];
                 var tdNombre = tr[i].getElementsByTagName("td")[1];
                 if (tdCedula || tdNombre) {
-                    var txtCedula = tdCedula.textContent || tdCedula.innerText;
-                    var txtNombre = tdNombre.textContent || tdNombre.innerText;
+                    var txtCedula = tdCedula.innerText;
+                    var txtNombre = tdNombre.innerText;
                     if (txtCedula.toUpperCase().indexOf(filter) > -1 || txtNombre.toUpperCase().indexOf(filter) > -1) {
                         tr[i].style.display = "";
                     } else {
@@ -348,88 +334,42 @@
             }
         }
 
-        // 2. GENERAR TOKEN
         function habilitarVoto(cedula, nombre) {
-            if(!confirm("¿Está seguro de generar el token para " + nombre + "?")) return;
-
+            if(!confirm("¿Generar token para " + nombre + "?")) return;
             const formData = new URLSearchParams();
             formData.append('cedula', cedula);
-
             fetch("/Junta/GenerarToken", {
                 method: "POST",
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                },
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: formData
             })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error("Error en la respuesta del servidor");
-                }
-                return response.json();
-            })
-            .then(data => {
-                if (data.success) {
+            .then(r => r.json())
+            .then(d => {
+                if (d.success) {
                     document.getElementById("nombreVotanteModal").innerText = nombre;
-                    document.getElementById("tokenDisplay").innerText = data.token;
-
-                    var modalEl = document.getElementById('modalToken');
-                    var modal = new bootstrap.Modal(modalEl);
-                    modal.show();
-                } else {
-                    alert("No se pudo generar: " + data.message);
-                }
+                    document.getElementById("tokenDisplay").innerText = d.token;
+                    new bootstrap.Modal(document.getElementById('modalToken')).show();
+                } else alert("Error: " + d.message);
             })
-            .catch(error => {
-                console.error("Error:", error);
-                alert("Error de conexión. Revise que la API esté encendida.");
-            });
+            .catch(e => { console.error(e); alert("Error de conexión"); });
         }
 
-        // 3. CERRAR MESA
         function confirmarCierre() {
-            if (!confirm("⚠️ ATENCIÓN: Al cerrar la mesa NO podrá generar más tokens.\n\n¿Confirma que ha terminado la jornada de votación?")) return;
-
-            fetch("/Junta/CerrarMesa", {
-                method: "POST"
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    location.reload();
-                } else {
-                    alert(data.message);
-                }
-            })
-            .catch(error => {
-                console.error("Error:", error);
-                alert("Error al intentar cerrar la mesa.");
-            });
+            if (!confirm("⚠️ ATENCIÓN: Al cerrar la mesa NO podrá generar más tokens.\n¿Confirma el cierre?")) return;
+            fetch("/Junta/CerrarMesa", { method: "POST" })
+            .then(r => r.json())
+            .then(d => { if (d.success) location.reload(); else alert(d.message); })
+            .catch(e => { console.error(e); alert("Error al cerrar"); });
         }
 
-        // 4. INICIAR MESA (APERTURA)
         function iniciarMesa() {
-            if (!confirm("¿Está listo para iniciar la votación en esta mesa?")) return;
-
-            fetch("/Junta/IniciarMesa", {
-                method: "POST"
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    location.reload();
-                } else {
-                    alert(data.message);
-                }
-            })
-            .catch(error => {
-                console.error("Error:", error);
-                alert("Error al intentar abrir la mesa.");
-            });
+            if (!confirm("¿Está listo para iniciar la votación?")) return;
+            fetch("/Junta/IniciarMesa", { method: "POST" })
+            .then(r => r.json())
+            .then(d => { if (d.success) location.reload(); else alert(d.message); })
+            .catch(e => { console.error(e); alert("Error al abrir"); });
         }
 
-        function recargarPagina() {
-            location.reload();
-        }
+        function recargarPagina() { location.reload(); }
     </script>
 }
